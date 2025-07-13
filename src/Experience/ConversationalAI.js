@@ -516,25 +516,26 @@ export default class ConversationalAI
         try {
             console.log('Starting audio streaming to AI...')
             
-            // Create audio processing pipeline
+            // Create MediaStreamSource but don't connect to destination
             const source = this.audioContext.createMediaStreamSource(this.stream)
             
-            // Use ScriptProcessor for real-time PCM conversion
-            const processor = this.audioContext.createScriptProcessor(1024, 1, 1)
+            // Create ScriptProcessor for audio capture only (not connected to output)
+            const processor = this.audioContext.createScriptProcessor(4096, 1, 1)
             
             processor.onaudioprocess = (event) => {
-                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN && !this.isSpeaking) {
                     const inputBuffer = event.inputBuffer
                     const inputData = inputBuffer.getChannelData(0)
                     
-                    // Convert Float32 to 16-bit signed PCM
+                    // Convert Float32 to 16-bit signed PCM as required by ElevenLabs
                     const pcmData = new Int16Array(inputData.length)
                     for (let i = 0; i < inputData.length; i++) {
+                        // Clamp and convert to 16-bit signed integer
                         const sample = Math.max(-1, Math.min(1, inputData[i]))
-                        pcmData[i] = Math.round(sample * 32767)
+                        pcmData[i] = sample < 0 ? sample * 32768 : sample * 32767
                     }
                     
-                    // Send raw PCM data as binary
+                    // Send raw binary PCM data directly to WebSocket
                     try {
                         this.websocket.send(pcmData.buffer)
                     } catch (error) {
@@ -543,14 +544,14 @@ export default class ConversationalAI
                 }
             }
             
-            // Connect audio processing pipeline
+            // Connect source to processor but NOT to destination (to avoid feedback)
             source.connect(processor)
-            processor.connect(this.audioContext.destination)
+            // DO NOT connect processor to destination - this was causing the WebSocket errors
             
             // Store processor reference for cleanup
             this.audioProcessor = processor
             
-            // Set up audio analysis for input level visualization
+            // Set up separate analyser for visualization
             const analyser = this.audioContext.createAnalyser()
             analyser.fftSize = 256
             source.connect(analyser)
