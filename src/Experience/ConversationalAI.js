@@ -7,9 +7,9 @@ export default class ConversationalAI
         this.experience = new Experience()
         this.debug = this.experience.debug
         
-        // ElevenLabs configuration
-        this.agentId = 'VKkqHVzHTMdhYVGSj8am'
-        this.apiKey = 'sk_5eb294966f9b6ff79344c6fd5addb3edc4a97e5bceb339cc'
+        // ElevenLabs configuration - YOU NEED TO UPDATE THESE
+        this.agentId = 'YOUR_AGENT_ID_HERE'  // Replace with your actual agent ID
+        this.apiKey = 'YOUR_API_KEY_HERE'    // Replace with your actual API key
         
         // Connection state
         this.isConnected = false
@@ -49,12 +49,22 @@ export default class ConversationalAI
                 <div class="ai-splash-progress">
                     <div class="ai-splash-progress-bar"></div>
                 </div>
+                <div class="ai-splash-error" style="display: none;">
+                    <p class="ai-splash-error-text"></p>
+                    <button class="ai-splash-retry">Retry Connection</button>
+                </div>
             </div>
         `
         document.body.appendChild(this.splash)
         
         // Add splash screen styles
         this.addSplashStyles()
+        
+        // Add retry functionality
+        this.splash.querySelector('.ai-splash-retry').addEventListener('click', () => {
+            this.hideError()
+            this.autoInit()
+        })
     }
     
     addSplashStyles()
@@ -140,7 +150,7 @@ export default class ConversationalAI
                 height: 2px;
                 background: rgba(255, 255, 255, 0.1);
                 border-radius: 1px;
-                margin: 0 auto;
+                margin: 0 auto 2rem auto;
                 overflow: hidden;
             }
             
@@ -149,7 +159,33 @@ export default class ConversationalAI
                 background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
                 border-radius: 1px;
                 width: 0%;
-                animation: progress 3s ease-in-out;
+                transition: width 0.3s ease;
+            }
+            
+            .ai-splash-error {
+                margin-top: 2rem;
+            }
+            
+            .ai-splash-error-text {
+                color: #ff6b6b;
+                font-size: 1rem;
+                margin-bottom: 1rem;
+            }
+            
+            .ai-splash-retry {
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                border: none;
+                color: white;
+                padding: 12px 24px;
+                border-radius: 25px;
+                font-family: inherit;
+                font-size: 1rem;
+                cursor: pointer;
+                transition: transform 0.2s ease;
+            }
+            
+            .ai-splash-retry:hover {
+                transform: translateY(-2px);
             }
             
             @keyframes pulse {
@@ -165,11 +201,6 @@ export default class ConversationalAI
             @keyframes fadeInOut {
                 0%, 100% { opacity: 0.8; }
                 50% { opacity: 0.4; }
-            }
-            
-            @keyframes progress {
-                0% { width: 0%; }
-                100% { width: 100%; }
             }
             
             /* Hide title when splash is active */
@@ -193,6 +224,38 @@ export default class ConversationalAI
         }
     }
     
+    updateProgress(percentage)
+    {
+        const progressBar = this.splash.querySelector('.ai-splash-progress-bar')
+        if (progressBar) {
+            progressBar.style.width = `${percentage}%`
+        }
+    }
+    
+    showError(message)
+    {
+        const errorElement = this.splash.querySelector('.ai-splash-error')
+        const errorText = this.splash.querySelector('.ai-splash-error-text')
+        const progressElement = this.splash.querySelector('.ai-splash-progress')
+        
+        if (errorElement && errorText && progressElement) {
+            errorText.textContent = message
+            errorElement.style.display = 'block'
+            progressElement.style.display = 'none'
+        }
+    }
+    
+    hideError()
+    {
+        const errorElement = this.splash.querySelector('.ai-splash-error')
+        const progressElement = this.splash.querySelector('.ai-splash-progress')
+        
+        if (errorElement && progressElement) {
+            errorElement.style.display = 'none'
+            progressElement.style.display = 'block'
+        }
+    }
+    
     hideSplash()
     {
         setTimeout(() => {
@@ -207,8 +270,14 @@ export default class ConversationalAI
     async autoInit()
     {
         try {
+            // Check credentials first
+            if (this.agentId === 'YOUR_AGENT_ID_HERE' || this.apiKey === 'YOUR_API_KEY_HERE') {
+                throw new Error('Please update your ElevenLabs Agent ID and API Key in ConversationalAI.js')
+            }
+            
             // Step 1: Initialize audio context
             this.updateSplashStatus('Initializing audio systems...')
+            this.updateProgress(20)
             await this.delay(800)
             
             this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
@@ -218,6 +287,7 @@ export default class ConversationalAI
             
             // Step 2: Request microphone permission
             this.updateSplashStatus('Requesting microphone access...')
+            this.updateProgress(40)
             await this.delay(600)
             
             const stream = await navigator.mediaDevices.getUserMedia({
@@ -234,32 +304,42 @@ export default class ConversationalAI
             
             // Step 3: Connect to ElevenLabs
             this.updateSplashStatus('Connecting to AI neural network...')
+            this.updateProgress(60)
             await this.delay(800)
             
             await this.connectToElevenLabs()
             
             // Step 4: Complete initialization
             this.updateSplashStatus('AI ready - speak naturally')
+            this.updateProgress(100)
             await this.delay(1000)
             
             this.hideSplash()
             
         } catch (error) {
             console.error('Auto-initialization failed:', error)
-            this.updateSplashStatus('Initialization failed - click to retry')
+            this.updateSplashStatus('Connection failed')
+            this.updateProgress(0)
             
-            // Add click to retry
-            this.splash.addEventListener('click', () => {
-                this.splash.remove()
-                this.createSplashScreen()
-                this.autoInit()
-            })
+            let errorMessage = 'Connection failed. Please check your internet connection.'
+            
+            if (error.message.includes('Agent ID') || error.message.includes('API Key')) {
+                errorMessage = 'Please update your ElevenLabs credentials in the code.'
+            } else if (error.message.includes('microphone')) {
+                errorMessage = 'Microphone access denied. Please allow microphone access and retry.'
+            } else if (error.message.includes('WebSocket')) {
+                errorMessage = 'Failed to connect to ElevenLabs. Please check your API key and agent ID.'
+            }
+            
+            this.showError(errorMessage)
         }
     }
     
     async connectToElevenLabs()
     {
         return new Promise((resolve, reject) => {
+            console.log('Connecting to ElevenLabs with Agent ID:', this.agentId)
+            
             const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${this.agentId}`
             
             this.websocket = new WebSocket(wsUrl)
@@ -272,6 +352,8 @@ export default class ConversationalAI
                     type: 'auth',
                     xi_api_key: this.apiKey
                 }
+                
+                console.log('Sending auth message:', authMessage)
                 this.websocket.send(JSON.stringify(authMessage))
             }
             
@@ -279,6 +361,7 @@ export default class ConversationalAI
                 if (typeof event.data === 'string') {
                     try {
                         const message = JSON.parse(event.data)
+                        console.log('Received message:', message)
                         
                         switch (message.type) {
                             case 'conversation_initiation_metadata':
@@ -298,7 +381,7 @@ export default class ConversationalAI
                                 
                             case 'error':
                                 console.error('ElevenLabs error:', message)
-                                reject(new Error(message.message))
+                                reject(new Error(`ElevenLabs error: ${message.message}`))
                                 break
                         }
                     } catch (error) {
@@ -306,6 +389,7 @@ export default class ConversationalAI
                     }
                 } else {
                     // Binary audio data from AI
+                    console.log('Received audio data:', event.data.byteLength, 'bytes')
                     this.handleAudioResponse(event.data)
                 }
             }
@@ -315,19 +399,24 @@ export default class ConversationalAI
                 this.isConnected = false
                 this.isSpeaking = false
                 this.stopAudioStreaming()
+                
+                if (event.code !== 1000) {
+                    reject(new Error(`WebSocket closed with code ${event.code}: ${event.reason}`))
+                }
             }
             
             this.websocket.onerror = (error) => {
                 console.error('WebSocket error:', error)
-                reject(error)
+                reject(new Error('WebSocket connection failed'))
             }
             
-            // Timeout after 10 seconds
+            // Timeout after 15 seconds
             setTimeout(() => {
                 if (!this.isConnected) {
-                    reject(new Error('Connection timeout'))
+                    this.websocket.close()
+                    reject(new Error('Connection timeout - please check your credentials'))
                 }
-            }, 10000)
+            }, 15000)
         })
     }
     
