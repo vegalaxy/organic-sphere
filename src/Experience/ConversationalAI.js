@@ -499,29 +499,38 @@ export default class ConversationalAI
         try {
             console.log('Starting audio streaming to AI...')
             
-            // Use MediaRecorder for proper audio streaming
-            this.mediaRecorder = new MediaRecorder(this.stream, {
-                mimeType: 'audio/webm;codecs=pcm'
-            })
+            // Create audio processing pipeline for PCM data
+            const source = this.audioContext.createMediaStreamSource(this.stream)
             
-            this.mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0 && this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-                    // Convert blob to ArrayBuffer and send as binary
-                    event.data.arrayBuffer().then(buffer => {
-                        this.websocket.send(buffer)
-                    })
+            // Create ScriptProcessor for real-time audio processing
+            const processor = this.audioContext.createScriptProcessor(4096, 1, 1)
+            
+            processor.onaudioprocess = (event) => {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
+                    const inputBuffer = event.inputBuffer
+                    const inputData = inputBuffer.getChannelData(0)
+                    
+                    // Convert float32 to int16 PCM
+                    const pcmData = new Int16Array(inputData.length)
+                    for (let i = 0; i < inputData.length; i++) {
+                        // Clamp to [-1, 1] and convert to 16-bit
+                        const sample = Math.max(-1, Math.min(1, inputData[i]))
+                        pcmData[i] = sample * 0x7FFF
+                    }
+                    
+                    // Send raw PCM data as binary
+                    this.websocket.send(pcmData.buffer)
                 }
             }
             
-            this.mediaRecorder.onerror = (error) => {
-                console.error('MediaRecorder error:', error)
-            }
+            // Connect the audio pipeline
+            source.connect(processor)
+            processor.connect(this.audioContext.destination)
             
-            // Start recording in small chunks
-            this.mediaRecorder.start(100) // 100ms chunks
+            // Store reference for cleanup
+            this.audioProcessor = processor
             
-            // Set up audio analysis for visualization
-            const source = this.audioContext.createMediaStreamSource(this.stream)
+            // Set up separate audio analysis for visualization
             const analyser = this.audioContext.createAnalyser()
             analyser.fftSize = 256
             source.connect(analyser)
@@ -549,9 +558,9 @@ export default class ConversationalAI
     
     stopAudioStreaming()
     {
-        if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-            this.mediaRecorder.stop()
-            this.mediaRecorder = null
+        if (this.audioProcessor) {
+            this.audioProcessor.disconnect()
+            this.audioProcessor = null
         }
         
         this.inputLevel = 0
