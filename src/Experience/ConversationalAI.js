@@ -8,8 +8,8 @@ export default class ConversationalAI
         this.debug = this.experience.debug
         
         // ElevenLabs configuration - YOU NEED TO UPDATE THESE
-        this.agentId = 'YOUR_AGENT_ID_HERE'  // Replace with your actual agent ID
-        this.apiKey = 'YOUR_API_KEY_HERE'    // Replace with your actual API key
+        this.agentId = 'VKkqHVzHTMdhYVGSj8am'  // Your ElevenLabs Agent ID
+        this.apiKey = 'sk_5eb294966f9b6ff79344c6fd5addb3edc4a97e5bceb339cc'    // Your ElevenLabs API key
         
         // Connection state
         this.isConnected = false
