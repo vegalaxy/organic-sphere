@@ -7,16 +7,15 @@ export default class ConversationalAI
         this.experience = new Experience()
         this.debug = this.experience.debug
         
-        // ElevenLabs configuration
+        // ElevenLabs configuration - exactly as per official guide
         this.agentId = 'VKkqHVzHTMdhYVGSj8am'
         this.apiKey = 'sk_5eb294966f9b6ff79344c6fd5addb3edc4a97e5bceb339cc'
         
         // Connection state
         this.isConnected = false
-        this.isRecording = false
         this.isSpeaking = false
         
-        // Audio context and processing
+        // Audio context and processing - following official guide specs
         this.audioContext = null
         this.mediaRecorder = null
         this.audioQueue = []
@@ -29,10 +28,6 @@ export default class ConversationalAI
         this.inputLevel = 0
         this.outputLevel = 0
         
-        // Audio processing
-        this.audioWorkletNode = null
-        this.stream = null
-        
         // UI Elements
         this.ui = {}
         
@@ -43,20 +38,12 @@ export default class ConversationalAI
     async init()
     {
         try {
-            // Initialize audio context
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: 16000
-            })
+            console.log('Initializing ConversationalAI...')
             
-            // Get microphone access
-            this.stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: 16000,
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
+            // Initialize audio context with exact specs from ElevenLabs guide
+            this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                sampleRate: 16000,
+                channelCount: 1
             })
             
             console.log('ConversationalAI initialized successfully')
@@ -64,7 +51,7 @@ export default class ConversationalAI
             
         } catch (error) {
             console.error('Failed to initialize ConversationalAI:', error)
-            this.updateUIStatus('Microphone access denied')
+            this.updateUIStatus('Initialization failed')
         }
     }
     
@@ -118,8 +105,41 @@ export default class ConversationalAI
             }
         })
         
+        // Add debug controls if debug mode is enabled
+        if (this.debug) {
+            this.addDebugControls()
+        }
+        
         // Add styles
         this.addStyles()
+    }
+    
+    addDebugControls()
+    {
+        const debugFolder = this.debug.addFolder({
+            title: 'Conversational AI',
+            expanded: true
+        })
+        
+        debugFolder.addButton({
+            title: 'Start Conversation'
+        }).on('click', () => {
+            this.startConversation()
+        })
+        
+        debugFolder.addButton({
+            title: 'End Conversation'
+        }).on('click', () => {
+            this.endConversation()
+        })
+        
+        debugFolder.addMonitor(this, 'isConnected', {
+            label: 'Connected'
+        })
+        
+        debugFolder.addMonitor(this, 'isSpeaking', {
+            label: 'AI Speaking'
+        })
     }
     
     addStyles()
@@ -148,6 +168,8 @@ export default class ConversationalAI
                 backdrop-filter: blur(10px);
                 border: 1px solid rgba(255, 255, 255, 0.1);
                 transition: all 0.3s ease;
+                max-width: 200px;
+                text-align: center;
             }
             
             .ai-status.connected {
@@ -289,7 +311,6 @@ export default class ConversationalAI
     updateUIButton()
     {
         if (this.ui.button) {
-            const icon = this.ui.button.querySelector('.ai-button-icon svg')
             const text = this.ui.button.querySelector('.ai-button-text')
             
             this.ui.button.className = 'ai-button'
@@ -300,27 +321,9 @@ export default class ConversationalAI
                 
                 if (this.isSpeaking) {
                     this.ui.button.classList.add('speaking')
-                    icon.innerHTML = `
-                        <circle cx="12" cy="12" r="3"></circle>
-                        <path d="M12 1v6m0 6v6"></path>
-                        <path d="m21 21-6-6m0 0L9 9m6 6 6-6M9 9l-6 6"></path>
-                    `
-                } else {
-                    icon.innerHTML = `
-                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                        <line x1="12" y1="19" x2="12" y2="23"></line>
-                        <line x1="8" y1="23" x2="16" y2="23"></line>
-                    `
                 }
             } else {
-                text.textContent = 'Start Conversation'
-                icon.innerHTML = `
-                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
-                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
-                    <line x1="12" y1="19" x2="12" y2="23"></line>
-                    <line x1="8" y1="23" x2="16" y2="23"></line>
-                `
+                text.textContent = 'Start Chat'
             }
         }
     }
@@ -355,25 +358,44 @@ export default class ConversationalAI
         if (this.isConnected) return
         
         try {
-            this.updateUIStatus('Connecting...')
+            console.log('Starting conversation...')
+            this.updateUIStatus('Requesting microphone...')
             
-            // Resume audio context if suspended
+            // Step 1: Get microphone access - exactly as per ElevenLabs guide
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    sampleRate: 16000,
+                    channelCount: 1,
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true
+                }
+            })
+            
+            console.log('Microphone access granted')
+            this.updateUIStatus('Connecting to ElevenLabs...')
+            
+            // Step 2: Resume audio context if suspended
             if (this.audioContext.state === 'suspended') {
                 await this.audioContext.resume()
             }
             
-            // Create WebSocket connection
+            // Step 3: Create WebSocket connection - exactly as per official guide
             const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${this.agentId}`
+            console.log('Connecting to:', wsUrl)
+            
             this.websocket = new WebSocket(wsUrl)
             
-            this.websocket.onopen = async () => {
+            this.websocket.onopen = () => {
+                console.log('WebSocket connected')
                 this.updateUIStatus('Authenticating...')
                 
-                // Send authentication
+                // Step 4: Send authentication - exactly as per guide
                 const authMessage = {
                     type: 'auth',
                     xi_api_key: this.apiKey
                 }
+                console.log('Sending auth message:', authMessage)
                 this.websocket.send(JSON.stringify(authMessage))
             }
             
@@ -382,16 +404,26 @@ export default class ConversationalAI
             }
             
             this.websocket.onclose = (event) => {
+                console.log('WebSocket closed:', event.code, event.reason)
                 this.isConnected = false
-                this.stopRecording()
+                this.isSpeaking = false
+                this.stopAudioStreaming()
                 this.updateUIStatus('Disconnected')
                 this.updateUIButton()
+                
+                // Stop all tracks
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop())
+                }
             }
             
             this.websocket.onerror = (error) => {
                 console.error('WebSocket error:', error)
                 this.updateUIStatus('Connection failed')
             }
+            
+            // Store stream for later cleanup
+            this.stream = stream
             
         } catch (error) {
             console.error('Failed to start conversation:', error)
@@ -401,15 +433,24 @@ export default class ConversationalAI
     
     endConversation()
     {
+        console.log('Ending conversation...')
+        
         if (this.websocket) {
             this.websocket.close()
             this.websocket = null
         }
         
-        this.stopRecording()
+        this.stopAudioStreaming()
+        
+        if (this.stream) {
+            this.stream.getTracks().forEach(track => track.stop())
+            this.stream = null
+        }
+        
         this.isConnected = false
         this.isSpeaking = false
         this.outputLevel = 0
+        this.inputLevel = 0
         
         this.updateUIStatus('Disconnected')
         this.updateUIButton()
@@ -420,24 +461,28 @@ export default class ConversationalAI
         if (typeof event.data === 'string') {
             try {
                 const message = JSON.parse(event.data)
+                console.log('Received message:', message)
                 
                 switch (message.type) {
                     case 'conversation_initiation_metadata':
+                        console.log('Conversation initiated successfully')
                         this.isConnected = true
                         this.updateUIStatus('Connected - Speak now!')
                         this.updateUIButton()
-                        this.startRecording()
+                        this.startAudioStreaming()
                         break
                         
                     case 'agent_response':
-                        console.log('Agent response:', message)
+                        console.log('Agent response received')
                         break
                         
                     case 'user_transcript':
+                        console.log('User transcript:', message.user_transcript)
                         this.updateUIStatus(`You: "${message.user_transcript}"`)
                         break
                         
                     case 'internal_tentative_agent_response':
+                        console.log('Agent is thinking...')
                         this.updateUIStatus('AI is thinking...')
                         break
                         
@@ -445,12 +490,16 @@ export default class ConversationalAI
                         console.error('ElevenLabs error:', message)
                         this.updateUIStatus('Error: ' + message.message)
                         break
+                        
+                    default:
+                        console.log('Unknown message type:', message.type)
                 }
             } catch (error) {
                 console.error('Failed to parse message:', error)
             }
         } else {
-            // Binary audio data
+            // Binary audio data from agent
+            console.log('Received audio data:', event.data.byteLength, 'bytes')
             this.handleAudioResponse(event.data)
         }
     }
@@ -488,18 +537,10 @@ export default class ConversationalAI
         const audioData = this.audioQueue.shift()
         
         try {
-            // Create audio buffer
-            const audioBuffer = this.audioContext.createBuffer(1, audioData.byteLength / 2, 16000)
-            const channelData = audioBuffer.getChannelData(0)
+            // Decode audio data - following ElevenLabs format
+            const audioBuffer = await this.audioContext.decodeAudioData(audioData.slice(0))
             
-            // Convert PCM to float32
-            const view = new DataView(audioData)
-            for (let i = 0; i < channelData.length; i++) {
-                const sample = view.getInt16(i * 2, true)
-                channelData[i] = sample / 32768.0
-            }
-            
-            // Play audio
+            // Create audio source
             const source = this.audioContext.createBufferSource()
             const gainNode = this.audioContext.createGain()
             const analyser = this.audioContext.createAnalyser()
@@ -509,7 +550,7 @@ export default class ConversationalAI
             gainNode.connect(analyser)
             analyser.connect(this.audioContext.destination)
             
-            // Audio analysis
+            // Audio analysis for visualization
             analyser.fftSize = 256
             const dataArray = new Uint8Array(analyser.frequencyBinCount)
             
@@ -541,11 +582,14 @@ export default class ConversationalAI
         }
     }
     
-    async startRecording()
+    startAudioStreaming()
     {
-        if (!this.stream || this.isRecording) return
+        if (!this.stream) return
         
         try {
+            console.log('Starting audio streaming...')
+            
+            // Create audio processing pipeline - exactly as per ElevenLabs guide
             const source = this.audioContext.createMediaStreamSource(this.stream)
             const processor = this.audioContext.createScriptProcessor(4096, 1, 1)
             
@@ -556,16 +600,17 @@ export default class ConversationalAI
                 
                 const inputBuffer = event.inputBuffer.getChannelData(0)
                 
-                // Convert to PCM
+                // Convert to 16-bit PCM - exactly as per ElevenLabs guide
                 const pcmData = new Int16Array(inputBuffer.length)
                 for (let i = 0; i < inputBuffer.length; i++) {
                     const sample = Math.max(-1, Math.min(1, inputBuffer[i]))
                     pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF
                 }
                 
+                // Send PCM data to ElevenLabs
                 this.websocket.send(pcmData.buffer)
                 
-                // Update input level
+                // Update input level for visualization
                 let sum = 0
                 for (let i = 0; i < inputBuffer.length; i++) {
                     sum += Math.abs(inputBuffer[i])
@@ -577,21 +622,21 @@ export default class ConversationalAI
             processor.connect(this.audioContext.destination)
             
             this.audioProcessor = processor
-            this.isRecording = true
+            console.log('Audio streaming started')
             
         } catch (error) {
-            console.error('Failed to start recording:', error)
+            console.error('Failed to start audio streaming:', error)
         }
     }
     
-    stopRecording()
+    stopAudioStreaming()
     {
         if (this.audioProcessor) {
             this.audioProcessor.disconnect()
             this.audioProcessor = null
+            console.log('Audio streaming stopped')
         }
         
-        this.isRecording = false
         this.inputLevel = 0
     }
     
@@ -613,10 +658,6 @@ export default class ConversationalAI
     destroy()
     {
         this.endConversation()
-        
-        if (this.stream) {
-            this.stream.getTracks().forEach(track => track.stop())
-        }
         
         if (this.audioContext) {
             this.audioContext.close()
