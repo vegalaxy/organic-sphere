@@ -386,6 +386,15 @@ export default class ConversationalAI
                                 }
                                 break
                                 
+                            case 'ping':
+                                // Respond to ping messages to keep connection alive
+                                const pongMessage = {
+                                    type: 'pong',
+                                    event_id: message.ping_event.event_id
+                                }
+                                this.websocket.send(JSON.stringify(pongMessage))
+                                break
+                                
                             case 'error':
                                 console.error('ElevenLabs error:', message)
                                 reject(new Error(`ElevenLabs error: ${message.message}`))
@@ -455,6 +464,13 @@ export default class ConversationalAI
         this.isPlaying = true
         this.isSpeaking = true
         
+        // Set a timeout to reset speaking state if audio doesn't play
+        const speakingTimeout = setTimeout(() => {
+            this.isSpeaking = false
+            this.isPlaying = false
+            this.outputLevel = 0
+        }, 5000) // 5 second timeout
+        
         const audioData = this.audioQueue.shift()
         
         try {
@@ -498,6 +514,7 @@ export default class ConversationalAI
             source.start()
             
             source.onended = () => {
+                clearTimeout(speakingTimeout)
                 setTimeout(() => {
                     this.playAudioQueue()
                 }, 50)
@@ -505,6 +522,7 @@ export default class ConversationalAI
             
         } catch (error) {
             console.error('Failed to play audio:', error)
+            clearTimeout(speakingTimeout)
             this.playAudioQueue()
         }
     }
