@@ -7,23 +7,14 @@ export default class ConversationalAI
         this.experience = new Experience()
         this.debug = this.experience.debug
         
-        // ElevenLabs configuration - YOU NEED TO UPDATE THESE
-        this.agentId = 'VKkqHVzHTMdhYVGSj8am'  // Your ElevenLabs Agent ID
-        this.apiKey = 'sk_5eb294966f9b6ff79344c6fd5addb3edc4a97e5bceb339cc'    // Your ElevenLabs API key
+        // ElevenLabs configuration
+        this.agentId = 'VKkqHVzHTMdhYVGSj8am'
+        this.apiKey = 'sk_5eb294966f9b6ff79344c6fd5addb3edc4a97e5bceb339cc'
         
         // Connection state
         this.isConnected = false
         this.isSpeaking = false
         this.isInitializing = true
-        
-        // Audio context and processing
-        this.audioContext = null
-        this.mediaRecorder = null
-        this.audioQueue = []
-        this.isPlaying = false
-        
-        // WebSocket
-        this.websocket = null
         
         // Audio levels for visualization
         this.inputLevel = 0
@@ -275,17 +266,7 @@ export default class ConversationalAI
                 throw new Error('Please update your ElevenLabs Agent ID and API Key in ConversationalAI.js')
             }
             
-            // Step 1: Initialize audio context
-            this.updateSplashStatus('Initializing audio systems...')
-            this.updateProgress(20)
-            await this.delay(800)
-            
-            this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                sampleRate: 16000,
-                channelCount: 1
-            })
-            
-            // Step 2: Request microphone permission
+            // Step 1: Request microphone permission
             this.updateSplashStatus('Requesting microphone access...')
             this.updateProgress(40)
             await this.delay(600)
@@ -302,14 +283,14 @@ export default class ConversationalAI
             
             this.stream = stream
             
-            // Step 3: Connect to ElevenLabs
+            // Step 2: Connect to ElevenLabs
             this.updateSplashStatus('Connecting to AI neural network...')
             this.updateProgress(60)
             await this.delay(800)
             
             await this.connectToElevenLabs()
             
-            // Step 4: Complete initialization
+            // Step 3: Complete initialization
             this.updateSplashStatus('AI ready - speak naturally')
             this.updateProgress(100)
             await this.delay(1000)
@@ -338,14 +319,13 @@ export default class ConversationalAI
     async connectToElevenLabs()
     {
         return new Promise((resolve, reject) => {
-            console.log('Connecting to ElevenLabs with Agent ID:', this.agentId)
+            console.log('Connecting to ElevenLabs...')
             
             const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${this.agentId}`
-            
             this.websocket = new WebSocket(wsUrl)
             
             this.websocket.onopen = () => {
-                console.log('WebSocket connected to ElevenLabs')
+                console.log('WebSocket connected')
                 
                 // Send authentication
                 const authMessage = {
@@ -353,7 +333,6 @@ export default class ConversationalAI
                     xi_api_key: this.apiKey
                 }
                 
-                console.log('Sending auth message:', authMessage)
                 this.websocket.send(JSON.stringify(authMessage))
             }
             
@@ -361,7 +340,7 @@ export default class ConversationalAI
                 if (typeof event.data === 'string') {
                     try {
                         const message = JSON.parse(event.data)
-                        console.log('Received message:', message)
+                        console.log('Received:', message.type)
                         
                         switch (message.type) {
                             case 'conversation_initiation_metadata':
@@ -376,18 +355,17 @@ export default class ConversationalAI
                                 break
                                 
                             case 'agent_response':
-                                console.log('AI response received')
+                                console.log('AI responded')
                                 break
                                 
                             case 'audio':
-                                console.log('Received audio data')
                                 if (message.audio_event && message.audio_event.audio_base_64) {
-                                    this.handleAudioResponse(message.audio_event.audio_base_64)
+                                    this.playAudio(message.audio_event.audio_base_64)
                                 }
                                 break
                                 
                             case 'ping':
-                                // Respond to ping messages to keep connection alive
+                                // Respond to ping
                                 const pongMessage = {
                                     type: 'pong',
                                     event_id: message.ping_event.event_id
@@ -410,10 +388,9 @@ export default class ConversationalAI
                 console.log('WebSocket closed:', event.code, event.reason)
                 this.isConnected = false
                 this.isSpeaking = false
-                this.stopAudioStreaming()
                 
                 if (event.code !== 1000) {
-                    reject(new Error(`WebSocket closed with code ${event.code}: ${event.reason}`))
+                    reject(new Error(`WebSocket closed: ${event.reason}`))
                 }
             }
             
@@ -426,56 +403,72 @@ export default class ConversationalAI
             setTimeout(() => {
                 if (!this.isConnected) {
                     this.websocket.close()
-                    reject(new Error('Connection timeout - please check your credentials'))
+                    reject(new Error('Connection timeout'))
                 }
             }, 15000)
         })
     }
     
-    async handleAudioResponse(audioData)
+    startAudioStreaming()
+    {
+        if (!this.stream || !this.websocket) return
+        
+        console.log('Starting audio streaming...')
+        
+        // Create audio context
+        this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+            sampleRate: 16000
+        })
+        
+        // Create media stream source
+        const source = this.audioContext.createMediaStreamSource(this.stream)
+        
+        // Create script processor (exactly as in ElevenLabs docs)
+        const processor = this.audioContext.createScriptProcessor(1024, 1, 1)
+        
+        processor.onaudioprocess = (event) => {
+            if (this.websocket && this.websocket.readyState === WebSocket.OPEN && !this.isSpeaking) {
+                const inputBuffer = event.inputBuffer
+                const inputData = inputBuffer.getChannelData(0)
+                
+                // Convert to 16-bit PCM (exactly as in docs)
+                const pcmData = new Int16Array(inputData.length)
+                for (let i = 0; i < inputData.length; i++) {
+                    const sample = Math.max(-1, Math.min(1, inputData[i]))
+                    pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF
+                }
+                
+                // Send raw binary data
+                this.websocket.send(pcmData.buffer)
+            }
+        }
+        
+        // Connect source to processor (but NOT to destination)
+        source.connect(processor)
+        
+        // Create a silent gain node to keep processor active
+        const silentGain = this.audioContext.createGain()
+        silentGain.gain.value = 0
+        processor.connect(silentGain)
+        silentGain.connect(this.audioContext.destination)
+        
+        this.audioProcessor = processor
+    }
+    
+    async playAudio(audioBase64)
     {
         try {
-            // Decode base64 PCM audio from ElevenLabs
-            const binaryString = atob(audioData)
+            this.isSpeaking = true
+            
+            // Decode base64 PCM audio
+            const binaryString = atob(audioBase64)
             const bytes = new Uint8Array(binaryString.length)
             for (let i = 0; i < binaryString.length; i++) {
                 bytes[i] = binaryString.charCodeAt(i)
             }
-            this.audioQueue.push(bytes.buffer)
             
-            if (!this.isPlaying) {
-                this.playAudioQueue()
-            }
-            
-        } catch (error) {
-            console.error('Failed to handle audio response:', error)
-        }
-    }
-    
-    async playAudioQueue()
-    {
-        if (this.audioQueue.length === 0) {
-            this.isPlaying = false
-            this.isSpeaking = false
-            this.outputLevel = 0
-            return
-        }
-        
-        this.isPlaying = true
-        this.isSpeaking = true
-        
-        // Set a timeout to reset speaking state if audio doesn't play
-        const speakingTimeout = setTimeout(() => {
-            this.isSpeaking = false
-            this.isPlaying = false
-            this.outputLevel = 0
-        }, 5000) // 5 second timeout
-        
-        const audioData = this.audioQueue.shift()
-        
-        try {
-            // Convert raw PCM data to AudioBuffer
-            const pcmData = new Int16Array(audioData)
+            // Convert raw PCM to AudioBuffer
+            const pcmData = new Int16Array(bytes.buffer)
             const audioBuffer = this.audioContext.createBuffer(1, pcmData.length, 16000)
             const channelData = audioBuffer.getChannelData(0)
             
@@ -484,157 +477,21 @@ export default class ConversationalAI
                 channelData[i] = pcmData[i] / 32768.0
             }
             
+            // Play audio
             const source = this.audioContext.createBufferSource()
-            const gainNode = this.audioContext.createGain()
-            const analyser = this.audioContext.createAnalyser()
-            
             source.buffer = audioBuffer
-            source.connect(gainNode)
-            gainNode.connect(analyser)
-            analyser.connect(this.audioContext.destination)
+            source.connect(this.audioContext.destination)
             
-            // Set up audio analysis for visualization
-            analyser.fftSize = 256
-            const dataArray = new Uint8Array(analyser.frequencyBinCount)
-            
-            const updateOutputLevel = () => {
-                analyser.getByteFrequencyData(dataArray)
-                let sum = 0
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i]
-                }
-                this.outputLevel = sum / dataArray.length / 255
-                
-                if (this.isSpeaking) {
-                    requestAnimationFrame(updateOutputLevel)
-                }
+            source.onended = () => {
+                this.isSpeaking = false
             }
-            updateOutputLevel()
             
             source.start()
             
-            source.onended = () => {
-                clearTimeout(speakingTimeout)
-                setTimeout(() => {
-                    this.playAudioQueue()
-                }, 50)
-            }
-            
         } catch (error) {
             console.error('Failed to play audio:', error)
-            clearTimeout(speakingTimeout)
-            this.playAudioQueue()
+            this.isSpeaking = false
         }
-    }
-    
-    startAudioStreaming()
-    {
-        if (!this.stream) return
-        
-        try {
-            console.log('Starting audio streaming to AI...', {
-                streamActive: this.stream.active,
-                tracks: this.stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState }))
-            })
-            
-            // Create MediaStreamSource but don't connect to destination
-            const source = this.audioContext.createMediaStreamSource(this.stream)
-            
-            // Create ScriptProcessor for audio capture
-            const processor = this.audioContext.createScriptProcessor(1024, 1, 1)
-            
-            let audioDataSent = 0
-            
-            processor.onaudioprocess = (event) => {
-                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-                    const inputBuffer = event.inputBuffer
-                    const inputData = inputBuffer.getChannelData(0)
-                    
-                    // Check if there's actual audio data
-                    let hasAudio = false
-                    for (let i = 0; i < inputData.length; i++) {
-                        if (Math.abs(inputData[i]) > 0.01) {
-                            hasAudio = true
-                            break
-                        }
-                    }
-                    
-                    if (hasAudio) {
-                        console.log('Detected audio input, level:', Math.max(...inputData.map(Math.abs)))
-                    }
-                    
-                    // Convert Float32 to 16-bit signed PCM as required by ElevenLabs
-                    const pcmData = new Int16Array(inputData.length)
-                    for (let i = 0; i < inputData.length; i++) {
-                        // Clamp and convert to 16-bit signed integer
-                        const sample = Math.max(-1, Math.min(1, inputData[i]))
-                        pcmData[i] = sample < 0 ? sample * 32768 : sample * 32767
-                    }
-                    
-                    // Send raw binary PCM data directly to WebSocket
-                    try {
-                        this.websocket.send(pcmData.buffer)
-                        audioDataSent++
-                        if (audioDataSent % 100 === 0) {
-                            console.log('Sent', audioDataSent, 'audio chunks to AI')
-                        }
-                    } catch (error) {
-                        console.error('Failed to send audio data:', error)
-                    }
-                }
-            }
-            
-            // Connect source to processor
-            source.connect(processor)
-            
-            // Connect processor to a gain node set to 0 to keep it active but silent
-            const silentGain = this.audioContext.createGain()
-            silentGain.gain.value = 0
-            processor.connect(silentGain)
-            silentGain.connect(this.audioContext.destination)
-            
-            // Store processor reference for cleanup
-            this.audioProcessor = processor
-            
-            // Set up separate analyser for visualization
-            const analyser = this.audioContext.createAnalyser()
-            analyser.fftSize = 256
-            source.connect(analyser)
-            
-            const dataArray = new Uint8Array(analyser.frequencyBinCount)
-            
-            const updateInputLevel = () => {
-                if (!this.isConnected) return
-                
-                analyser.getByteFrequencyData(dataArray)
-                let sum = 0
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i]
-                }
-                this.inputLevel = sum / dataArray.length / 255
-                
-                // Log input level occasionally
-                if (Math.random() < 0.01) { // 1% chance to log
-                    console.log('Input level:', this.inputLevel)
-                }
-                
-                requestAnimationFrame(updateInputLevel)
-            }
-            updateInputLevel()
-            
-        } catch (error) {
-            console.error('Failed to start audio streaming:', error)
-        }
-    }
-    
-    stopAudioStreaming()
-    {
-        if (this.audioProcessor) {
-            this.audioProcessor.disconnect()
-            this.audioProcessor = null
-        }
-        
-        this.inputLevel = 0
     }
     
     getCombinedLevel()
@@ -655,7 +512,6 @@ export default class ConversationalAI
     update()
     {
         // This method is called by the main experience loop
-        // The sphere will automatically react to audio levels
     }
     
     destroy()
@@ -664,7 +520,9 @@ export default class ConversationalAI
             this.websocket.close()
         }
         
-        this.stopAudioStreaming()
+        if (this.audioProcessor) {
+            this.audioProcessor.disconnect()
+        }
         
         if (this.stream) {
             this.stream.getTracks().forEach(track => track.stop())
