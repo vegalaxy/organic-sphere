@@ -109,7 +109,7 @@ export default class ConversationalAI
                 await this.audioContext.resume()
             }
             
-            // Create WebSocket connection with proper URL format
+            // Create WebSocket connection following official guide
             const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${this.agentId}`
             console.log('Connecting to:', wsUrl)
             
@@ -121,7 +121,7 @@ export default class ConversationalAI
                     this.connectionStatus.status = 'Authenticating...'
                 }
                 
-                // Send authentication message
+                // Send authentication message following official guide
                 const authMessage = {
                     type: 'auth',
                     xi_api_key: this.apiKey
@@ -321,7 +321,7 @@ export default class ConversationalAI
         try {
             console.log('Starting audio recording...')
             
-            // Create audio processing pipeline
+            // Create audio processing pipeline following official guide
             const source = this.audioContext.createMediaStreamSource(this.stream)
             const processor = this.audioContext.createScriptProcessor(4096, 1, 1)
             
@@ -332,7 +332,7 @@ export default class ConversationalAI
                 
                 const inputBuffer = event.inputBuffer.getChannelData(0)
                 
-                // Convert float32 to 16-bit PCM
+                // Convert float32 to 16-bit PCM following official guide
                 const pcmData = new Int16Array(inputBuffer.length)
                 for (let i = 0; i < inputBuffer.length; i++) {
                     const sample = Math.max(-1, Math.min(1, inputBuffer[i]))
