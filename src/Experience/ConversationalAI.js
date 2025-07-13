@@ -426,19 +426,13 @@ export default class ConversationalAI
     async handleAudioResponse(audioData)
     {
         try {
-            // Handle base64 audio from ElevenLabs
-            if (typeof audioData === 'string') {
-                // Decode base64 to binary
-                const binaryString = atob(audioData)
-                const bytes = new Uint8Array(binaryString.length)
-                for (let i = 0; i < binaryString.length; i++) {
-                    bytes[i] = binaryString.charCodeAt(i)
-                }
-                this.audioQueue.push(bytes.buffer)
-            } else {
-                // Direct binary data
-                this.audioQueue.push(audioData)
+            // Decode base64 PCM audio from ElevenLabs
+            const binaryString = atob(audioData)
+            const bytes = new Uint8Array(binaryString.length)
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i)
             }
+            this.audioQueue.push(bytes.buffer)
             
             if (!this.isPlaying) {
                 this.playAudioQueue()
@@ -464,13 +458,12 @@ export default class ConversationalAI
         const audioData = this.audioQueue.shift()
         
         try {
-            // Create AudioBuffer directly from raw PCM data
-            // ElevenLabs sends raw PCM 16-bit signed integers at 16kHz
+            // Convert raw PCM data to AudioBuffer
             const pcmData = new Int16Array(audioData)
             const audioBuffer = this.audioContext.createBuffer(1, pcmData.length, 16000)
             const channelData = audioBuffer.getChannelData(0)
             
-            // Convert Int16 PCM to Float32 for Web Audio API
+            // Convert 16-bit signed PCM to Float32
             for (let i = 0; i < pcmData.length; i++) {
                 channelData[i] = pcmData[i] / 32768.0
             }
@@ -484,7 +477,7 @@ export default class ConversationalAI
             gainNode.connect(analyser)
             analyser.connect(this.audioContext.destination)
             
-            // Audio analysis for visualization
+            // Set up audio analysis for visualization
             analyser.fftSize = 256
             const dataArray = new Uint8Array(analyser.frequencyBinCount)
             
@@ -523,10 +516,10 @@ export default class ConversationalAI
         try {
             console.log('Starting audio streaming to AI...')
             
-            // Create proper audio processing for ElevenLabs PCM format
+            // Create audio processing pipeline
             const source = this.audioContext.createMediaStreamSource(this.stream)
             
-            // Use smaller buffer for real-time streaming (1024 samples = ~64ms at 16kHz)
+            // Use ScriptProcessor for real-time PCM conversion
             const processor = this.audioContext.createScriptProcessor(1024, 1, 1)
             
             processor.onaudioprocess = (event) => {
@@ -534,15 +527,14 @@ export default class ConversationalAI
                     const inputBuffer = event.inputBuffer
                     const inputData = inputBuffer.getChannelData(0)
                     
-                    // Convert float32 to int16 PCM (ElevenLabs expects signed 16-bit)
+                    // Convert Float32 to 16-bit signed PCM
                     const pcmData = new Int16Array(inputData.length)
                     for (let i = 0; i < inputData.length; i++) {
-                        // Clamp and convert to signed 16-bit PCM
                         const sample = Math.max(-1, Math.min(1, inputData[i]))
                         pcmData[i] = Math.round(sample * 32767)
                     }
                     
-                    // Send as raw binary data (not base64, not JSON)
+                    // Send raw PCM data as binary
                     try {
                         this.websocket.send(pcmData.buffer)
                     } catch (error) {
@@ -551,14 +543,14 @@ export default class ConversationalAI
                 }
             }
             
-            // Connect audio pipeline
+            // Connect audio processing pipeline
             source.connect(processor)
-            // Don't connect to destination to avoid feedback
+            processor.connect(this.audioContext.destination)
             
-            // Store reference for cleanup
+            // Store processor reference for cleanup
             this.audioProcessor = processor
             
-            // Set up separate audio analysis for visualization
+            // Set up audio analysis for input level visualization
             const analyser = this.audioContext.createAnalyser()
             analyser.fftSize = 256
             source.connect(analyser)
