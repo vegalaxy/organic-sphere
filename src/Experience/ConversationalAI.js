@@ -1,4 +1,5 @@
 import Experience from './Experience.js'
+import { Conversation } from '@elevenlabs/client'
 
 export default class ConversationalAI
 {
@@ -19,6 +20,9 @@ export default class ConversationalAI
         // Audio levels for visualization
         this.inputLevel = 0
         this.outputLevel = 0
+        
+        // Conversation instance
+        this.conversation = null
         
         // Auto-initialize
         this.createSplashScreen()
@@ -271,24 +275,14 @@ export default class ConversationalAI
             this.updateProgress(40)
             await this.delay(600)
             
-            const stream = await navigator.mediaDevices.getUserMedia({
-                audio: {
-                    sampleRate: 16000,
-                    channelCount: 1,
-                    echoCancellation: true,
-                    noiseSuppression: true,
-                    autoGainControl: true
-                }
-            })
+            await navigator.mediaDevices.getUserMedia({ audio: true })
             
-            this.stream = stream
-            
-            // Step 2: Connect to ElevenLabs
+            // Step 2: Connect to ElevenLabs using SDK
             this.updateSplashStatus('Connecting to AI neural network...')
             this.updateProgress(60)
             await this.delay(800)
             
-            await this.connectToElevenLabs()
+            await this.startConversation()
             
             // Step 3: Complete initialization
             this.updateSplashStatus('AI ready - speak naturally')
@@ -308,7 +302,7 @@ export default class ConversationalAI
                 errorMessage = 'Please update your ElevenLabs credentials in the code.'
             } else if (error.message.includes('microphone')) {
                 errorMessage = 'Microphone access denied. Please allow microphone access and retry.'
-            } else if (error.message.includes('WebSocket')) {
+            } else if (error.message.includes('agent')) {
                 errorMessage = 'Failed to connect to ElevenLabs. Please check your API key and agent ID.'
             }
             
@@ -316,218 +310,60 @@ export default class ConversationalAI
         }
     }
     
-    async connectToElevenLabs()
+    async startConversation()
     {
         return new Promise((resolve, reject) => {
-            console.log('Connecting to ElevenLabs...')
+            console.log('Starting ElevenLabs conversation...')
             
-            const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${this.agentId}`
-            this.websocket = new WebSocket(wsUrl)
-            
-            this.websocket.onopen = () => {
-                console.log('WebSocket connected')
-                
-                // Send authentication
-                const authMessage = {
-                    type: 'auth',
-                    xi_api_key: this.apiKey
-                }
-                
-                this.websocket.send(JSON.stringify(authMessage))
-            }
-            
-            this.websocket.onmessage = (event) => {
-                if (typeof event.data === 'string') {
-                    try {
-                        const message = JSON.parse(event.data)
-                        console.log('Received:', message.type)
-                        
-                        switch (message.type) {
-                            case 'conversation_initiation_metadata':
-                                console.log('AI conversation ready')
-                                this.isConnected = true
-                                this.startAudioStreaming()
-                                resolve()
-                                break
-                                
-                            case 'user_transcript':
-                                console.log('You said:', message.user_transcript)
-                                break
-                                
-                            case 'agent_response':
-                                console.log('AI responded')
-                                break
-                                
-                            case 'audio':
-                                if (message.audio_event && message.audio_event.audio_base_64) {
-                                    this.playAudio(message.audio_event.audio_base_64)
-                                }
-                                break
-                                
-                            case 'ping':
-                                // Respond to ping
-                                const pongMessage = {
-                                    type: 'pong',
-                                    event_id: message.ping_event.event_id
-                                }
-                                this.websocket.send(JSON.stringify(pongMessage))
-                                break
-                                
-                            case 'error':
-                                console.error('ElevenLabs error:', message)
-                                reject(new Error(`ElevenLabs error: ${message.message}`))
-                                break
-                        }
-                    } catch (error) {
-                        console.error('Failed to parse message:', error)
+            // Start the conversation using ElevenLabs SDK
+            Conversation.startSession({
+                agentId: this.agentId,
+                apiKey: this.apiKey,
+                onConnect: () => {
+                    console.log('AI conversation connected')
+                    this.isConnected = true
+                    resolve()
+                },
+                onDisconnect: () => {
+                    console.log('AI conversation disconnected')
+                    this.isConnected = false
+                    this.isSpeaking = false
+                },
+                onError: (error) => {
+                    console.error('ElevenLabs error:', error)
+                    reject(new Error(`ElevenLabs error: ${error.message || error}`))
+                },
+                onModeChange: (mode) => {
+                    console.log('AI mode changed:', mode.mode)
+                    this.isSpeaking = mode.mode === 'speaking'
+                    
+                    // Update audio levels based on mode
+                    if (mode.mode === 'speaking') {
+                        this.outputLevel = 0.8
+                        this.inputLevel = 0
+                    } else if (mode.mode === 'listening') {
+                        this.outputLevel = 0
+                        this.inputLevel = 0.5
+                    } else {
+                        this.outputLevel = 0
+                        this.inputLevel = 0
                     }
                 }
-            }
-            
-            this.websocket.onclose = (event) => {
-                console.log('WebSocket closed:', event.code, event.reason)
-                this.isConnected = false
-                this.isSpeaking = false
-                
-                if (event.code !== 1000) {
-                    reject(new Error(`WebSocket closed: ${event.reason}`))
-                }
-            }
-            
-            this.websocket.onerror = (error) => {
-                console.error('WebSocket error:', error)
-                reject(new Error('WebSocket connection failed'))
-            }
+            }).then((conversation) => {
+                this.conversation = conversation
+                console.log('Conversation started successfully')
+            }).catch((error) => {
+                console.error('Failed to start conversation:', error)
+                reject(error)
+            })
             
             // Timeout after 15 seconds
             setTimeout(() => {
                 if (!this.isConnected) {
-                    this.websocket.close()
                     reject(new Error('Connection timeout'))
                 }
             }, 15000)
         })
-    }
-    
-    startAudioStreaming()
-    {
-        if (!this.stream || !this.websocket) return
-        
-        console.log('Starting audio streaming...')
-        
-        // Try MediaRecorder approach - simpler and more reliable
-        try {
-            this.mediaRecorder = new MediaRecorder(this.stream, {
-                mimeType: 'audio/webm;codecs=pcm',
-                audioBitsPerSecond: 16000
-            })
-            
-            this.mediaRecorder.ondataavailable = (event) => {
-                if (event.data.size > 0 && this.websocket && this.websocket.readyState === WebSocket.OPEN && !this.isSpeaking) {
-                    // Convert webm to raw PCM
-                    this.convertToPCM(event.data)
-                }
-            }
-            
-            this.mediaRecorder.start(100) // 100ms chunks
-            console.log('MediaRecorder started')
-            
-        } catch (error) {
-            console.error('MediaRecorder failed, falling back to manual approach:', error)
-            this.fallbackAudioStreaming()
-        }
-    }
-    
-    async convertToPCM(webmBlob)
-    {
-        try {
-            const arrayBuffer = await webmBlob.arrayBuffer()
-            
-            // Create audio context for conversion
-            if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 16000
-                })
-            }
-            
-            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer)
-            const channelData = audioBuffer.getChannelData(0)
-            
-            // Convert to 16-bit PCM
-            const pcmData = new Int16Array(channelData.length)
-            for (let i = 0; i < channelData.length; i++) {
-                const sample = Math.max(-1, Math.min(1, channelData[i]))
-                pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF
-            }
-            
-            // Send to ElevenLabs
-            if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
-                this.websocket.send(pcmData.buffer)
-            }
-            
-        } catch (error) {
-            console.error('PCM conversion failed:', error)
-        }
-    }
-    
-    fallbackAudioStreaming()
-    {
-        // Fallback to basic approach - just send silence to keep connection alive
-        console.log('Using fallback audio streaming (silence)')
-        
-        this.silenceInterval = setInterval(() => {
-            if (this.websocket && this.websocket.readyState === WebSocket.OPEN && !this.isSpeaking) {
-                // Send small silence buffer
-                const silenceBuffer = new Int16Array(1024).fill(0)
-                this.websocket.send(silenceBuffer.buffer)
-            }
-        }, 100)
-    }
-    
-    async playAudio(audioBase64)
-    {
-        try {
-            this.isSpeaking = true
-            
-            // Decode base64 PCM audio
-            const binaryString = atob(audioBase64)
-            const bytes = new Uint8Array(binaryString.length)
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i)
-            }
-            
-            // Convert raw PCM to AudioBuffer
-            const pcmData = new Int16Array(bytes.buffer)
-            
-            if (!this.audioContext) {
-                this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-                    sampleRate: 16000
-                })
-            }
-            
-            const audioBuffer = this.audioContext.createBuffer(1, pcmData.length, 16000)
-            const channelData = audioBuffer.getChannelData(0)
-            
-            // Convert 16-bit signed PCM to Float32
-            for (let i = 0; i < pcmData.length; i++) {
-                channelData[i] = pcmData[i] / 32768.0
-            }
-            
-            // Play audio
-            const source = this.audioContext.createBufferSource()
-            source.buffer = audioBuffer
-            source.connect(this.audioContext.destination)
-            
-            source.onended = () => {
-                this.isSpeaking = false
-            }
-            
-            source.start()
-            
-        } catch (error) {
-            console.error('Failed to play audio:', error)
-            this.isSpeaking = false
-        }
     }
     
     getCombinedLevel()
@@ -548,32 +384,23 @@ export default class ConversationalAI
     update()
     {
         // This method is called by the main experience loop
+        // Audio levels will decay over time for smooth visualization
+        this.inputLevel *= 0.95
+        this.outputLevel *= 0.95
     }
     
     destroy()
     {
-        if (this.mediaRecorder) {
-            this.mediaRecorder.stop()
-        }
-        
-        if (this.silenceInterval) {
-            clearInterval(this.silenceInterval)
-        }
-        
-        if (this.websocket) {
-            this.websocket.close()
-        }
-        
-        if (this.stream) {
-            this.stream.getTracks().forEach(track => track.stop())
-        }
-        
-        if (this.audioContext) {
-            this.audioContext.close()
+        if (this.conversation) {
+            this.conversation.endSession()
+            this.conversation = null
         }
         
         if (this.splash) {
             this.splash.remove()
         }
+        
+        this.isConnected = false
+        this.isSpeaking = false
     }
 }
