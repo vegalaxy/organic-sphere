@@ -41,6 +41,19 @@ export default class ConversationalAI
             })
             
             this.debugFolder.addButton({
+                title: 'Test Connection'
+            }).on('click', () => {
+                console.log('=== CONNECTION TEST ===')
+                console.log('Agent ID:', this.agentId)
+                console.log('API Key present:', !!this.apiKey)
+                console.log('API Key length:', this.apiKey?.length)
+                console.log('Audio Context State:', this.audioContext?.state)
+                console.log('Stream active:', !!this.stream)
+                console.log('WebSocket state:', this.websocket?.readyState)
+                console.log('Is connected:', this.isConnected)
+            })
+            
+            this.debugFolder.addButton({
                 title: 'Start Conversation'
             }).on('click', () => {
                 this.startConversation()
