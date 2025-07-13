@@ -98,6 +98,18 @@ export default class ConversationalAI
             return
         }
         
+        // Validate credentials
+        if (!this.agentId || !this.apiKey) {
+            console.error('Missing credentials - Agent ID:', this.agentId, 'API Key:', this.apiKey ? 'Present' : 'Missing')
+            if(this.debug) {
+                this.connectionStatus.status = 'Missing Credentials'
+            }
+            return
+        }
+        
+        console.log('Using Agent ID:', this.agentId)
+        console.log('API Key length:', this.apiKey.length)
+        
         try {
             console.log('Starting conversation...')
             if(this.debug) {
@@ -117,6 +129,7 @@ export default class ConversationalAI
             
             this.websocket.onopen = async () => {
                 console.log('WebSocket connected')
+                console.log('WebSocket readyState:', this.websocket.readyState)
                 if(this.debug) {
                     this.connectionStatus.status = 'Authenticating...'
                 }
@@ -128,15 +141,20 @@ export default class ConversationalAI
                 }
                 
                 console.log('Sending auth:', authMessage)
+                console.log('Auth message stringified:', JSON.stringify(authMessage))
                 this.websocket.send(JSON.stringify(authMessage))
             }
             
             this.websocket.onmessage = (event) => {
+                console.log('Raw WebSocket message received:', event)
+                console.log('Message data type:', typeof event.data)
+                console.log('Message data:', event.data)
                 this.handleWebSocketMessage(event)
             }
             
             this.websocket.onclose = (event) => {
-                console.log('WebSocket disconnected:', event.code, event.reason)
+                console.log('WebSocket disconnected - Code:', event.code, 'Reason:', event.reason)
+                console.log('Was clean close:', event.wasClean)
                 this.isConnected = false
                 this.stopRecording()
                 if(this.debug) {
@@ -145,7 +163,8 @@ export default class ConversationalAI
             }
             
             this.websocket.onerror = (error) => {
-                console.error('WebSocket error:', error)
+                console.error('WebSocket error details:', error)
+                console.error('WebSocket state when error occurred:', this.websocket?.readyState)
                 if(this.debug) {
                     this.connectionStatus.status = 'Connection Error'
                 }
@@ -183,7 +202,8 @@ export default class ConversationalAI
         if (typeof event.data === 'string') {
             try {
                 const message = JSON.parse(event.data)
-                console.log('Received message:', message)
+                console.log('Parsed JSON message:', message)
+                console.log('Message type:', message.type)
                 
                 switch (message.type) {
                     case 'conversation_initiation_metadata':
@@ -192,6 +212,7 @@ export default class ConversationalAI
                         if(this.debug) {
                             this.connectionStatus.status = 'Connected'
                         }
+                        console.log('Starting recording after conversation initiation...')
                         this.startRecording()
                         break
                         
@@ -209,17 +230,23 @@ export default class ConversationalAI
                         
                     case 'error':
                         console.error('ElevenLabs error:', message)
+                        console.error('Error details:', message.message, message.code)
                         if(this.debug) {
                             this.connectionStatus.status = 'Error: ' + message.message
                         }
                         break
+                        
+                    default:
+                        console.log('Unknown message type:', message.type, message)
                 }
             } catch (error) {
                 console.error('Failed to parse WebSocket message:', error)
+                console.error('Raw message data:', event.data)
             }
         } else {
             // Binary audio data from agent
-            console.log('Received audio data:', event.data.byteLength, 'bytes')
+            console.log('Received binary audio data:', event.data.byteLength, 'bytes')
+            console.log('Audio data type:', event.data.constructor.name)
             this.handleAudioResponse(event.data)
         }
     }
@@ -340,6 +367,9 @@ export default class ConversationalAI
                 }
                 
                 // Send PCM data to ElevenLabs
+                if (pcmData.byteLength > 0) {
+                    console.log('Sending audio chunk:', pcmData.byteLength, 'bytes')
+                }
                 this.websocket.send(pcmData.buffer)
                 
                 // Update input level for visualization
