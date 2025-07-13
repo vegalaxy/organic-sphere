@@ -12,6 +12,7 @@ export default class Sphere
         this.scene = this.experience.scene
         this.time = this.experience.time
         this.microphone = this.experience.microphone
+        this.conversationalAI = this.experience.conversationalAI
 
         this.timeFrequency = 0.0003
         this.elapsedTime = 0
@@ -49,11 +50,41 @@ export default class Sphere
         this.variations.volume.downEasing = 0.002
         this.variations.volume.getValue = () =>
         {
-            const level0 = this.microphone.levels[0] || 0
-            const level1 = this.microphone.levels[1] || 0
-            const level2 = this.microphone.levels[2] || 0
+            // Use combined level from both microphone and AI audio
+            let micLevel = 0
+            if (this.microphone.ready) {
+                const level0 = this.microphone.levels[0] || 0
+                const level1 = this.microphone.levels[1] || 0
+                const level2 = this.microphone.levels[2] || 0
+                micLevel = Math.max(level0, level1, level2)
+            }
+            
+            let aiLevel = 0
+            if (this.conversationalAI) {
+                aiLevel = this.conversationalAI.getCombinedLevel()
+            }
+            
+            const combinedLevel = Math.max(micLevel, aiLevel)
+            return combinedLevel * 0.3
+        }
+        this.variations.volume.getDefault = () =>
+        {
+            return 0.152
+        }
 
-            return Math.max(level0, level1, level2) * 0.3
+        // Enhanced color variation based on AI speaking state
+        this.variations.aiSpeaking = {}
+        this.variations.aiSpeaking.target = 0
+        this.variations.aiSpeaking.current = 0
+        this.variations.aiSpeaking.upEasing = 0.05
+        this.variations.aiSpeaking.downEasing = 0.02
+        this.variations.aiSpeaking.getValue = () =>
+        {
+            return this.conversationalAI && this.conversationalAI.isAISpeaking() ? 1 : 0
+        }
+        this.variations.aiSpeaking.getDefault = () =>
+        {
+            return 0
         }
         this.variations.volume.getDefault = () =>
         {
@@ -128,7 +159,7 @@ export default class Sphere
         this.lights.a.intensity = 1.85
 
         this.lights.a.color = {}
-        this.lights.a.color.value = '#ff3e00'
+        this.lights.a.color.value = '#00ff88'  // AI green when speaking
         this.lights.a.color.instance = new THREE.Color(this.lights.a.color.value)
 
         this.lights.a.spherical = new THREE.Spherical(1, 0.615, 2.049)
@@ -139,7 +170,7 @@ export default class Sphere
         this.lights.b.intensity = 1.4
 
         this.lights.b.color = {}
-        this.lights.b.color.value = '#0063ff'
+        this.lights.b.color.value = '#ff6600'  // User orange when listening
         this.lights.b.color.instance = new THREE.Color(this.lights.b.color.value)
 
         this.lights.b.spherical = new THREE.Spherical(1, 2.561, - 1.844)
@@ -328,6 +359,13 @@ export default class Sphere
         this.material.uniforms.uDisplacementStrength.value = this.variations.volume.current
         this.material.uniforms.uDistortionStrength.value = this.variations.highLevel.current
         this.material.uniforms.uFresnelMultiplier.value = this.variations.mediumLevel.current
+
+        // Dynamic color mixing based on AI speaking state
+        const aiSpeakingIntensity = this.variations.aiSpeaking.current
+        
+        // Interpolate light intensities based on AI state
+        this.material.uniforms.uLightAIntensity.value = this.lights.a.intensity * (0.5 + aiSpeakingIntensity * 0.5)
+        this.material.uniforms.uLightBIntensity.value = this.lights.b.intensity * (0.5 + (1 - aiSpeakingIntensity) * 0.5)
 
         // Offset
         const offsetTime = this.elapsedTime * 0.3

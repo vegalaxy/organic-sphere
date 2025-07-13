@@ -9,6 +9,7 @@ import Resources from './Resources.js'
 import Renderer from './Renderer.js'
 import Camera from './Camera.js'
 import World from './World.js'
+import ConversationalAI from './ConversationalAI.js'
 
 import assets from './assets.js'
 import Microphone from './Microphone.js'
@@ -44,6 +45,7 @@ export default class Experience
         this.setRenderer()
         this.setResources()
         this.setMicrohopne()
+        this.setConversationalAI()
         this.setWorld()
         
         this.sizes.on('resize', () =>
@@ -114,6 +116,11 @@ export default class Experience
         this.microphone = new Microphone()
     }
 
+    setConversationalAI()
+    {
+        this.conversationalAI = new ConversationalAI()
+    }
+
     setWorld()
     {
         this.world = new World()
@@ -128,6 +135,9 @@ export default class Experience
 
         if(this.microphone)
             this.microphone.update()
+
+        if(this.conversationalAI)
+            this.conversationalAI.update()
 
         if(this.world)
             this.world.update()
