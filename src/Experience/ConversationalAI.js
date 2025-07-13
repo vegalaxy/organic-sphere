@@ -464,7 +464,16 @@ export default class ConversationalAI
         const audioData = this.audioQueue.shift()
         
         try {
-            const audioBuffer = await this.audioContext.decodeAudioData(audioData.slice(0))
+            // Create AudioBuffer directly from raw PCM data
+            // ElevenLabs sends raw PCM 16-bit signed integers at 16kHz
+            const pcmData = new Int16Array(audioData)
+            const audioBuffer = this.audioContext.createBuffer(1, pcmData.length, 16000)
+            const channelData = audioBuffer.getChannelData(0)
+            
+            // Convert Int16 PCM to Float32 for Web Audio API
+            for (let i = 0; i < pcmData.length; i++) {
+                channelData[i] = pcmData[i] / 32768.0
+            }
             
             const source = this.audioContext.createBufferSource()
             const gainNode = this.audioContext.createGain()
