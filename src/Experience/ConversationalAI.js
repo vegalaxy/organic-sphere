@@ -532,18 +532,36 @@ export default class ConversationalAI
         if (!this.stream) return
         
         try {
-            console.log('Starting audio streaming to AI...')
+            console.log('Starting audio streaming to AI...', {
+                streamActive: this.stream.active,
+                tracks: this.stream.getTracks().map(t => ({ kind: t.kind, enabled: t.enabled, readyState: t.readyState }))
+            })
             
             // Create MediaStreamSource but don't connect to destination
             const source = this.audioContext.createMediaStreamSource(this.stream)
             
-            // Create ScriptProcessor for audio capture only (not connected to output)
-            const processor = this.audioContext.createScriptProcessor(4096, 1, 1)
+            // Create ScriptProcessor for audio capture
+            const processor = this.audioContext.createScriptProcessor(1024, 1, 1)
+            
+            let audioDataSent = 0
             
             processor.onaudioprocess = (event) => {
-                if (this.websocket && this.websocket.readyState === WebSocket.OPEN && !this.isSpeaking) {
+                if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                     const inputBuffer = event.inputBuffer
                     const inputData = inputBuffer.getChannelData(0)
+                    
+                    // Check if there's actual audio data
+                    let hasAudio = false
+                    for (let i = 0; i < inputData.length; i++) {
+                        if (Math.abs(inputData[i]) > 0.01) {
+                            hasAudio = true
+                            break
+                        }
+                    }
+                    
+                    if (hasAudio) {
+                        console.log('Detected audio input, level:', Math.max(...inputData.map(Math.abs)))
+                    }
                     
                     // Convert Float32 to 16-bit signed PCM as required by ElevenLabs
                     const pcmData = new Int16Array(inputData.length)
@@ -556,15 +574,24 @@ export default class ConversationalAI
                     // Send raw binary PCM data directly to WebSocket
                     try {
                         this.websocket.send(pcmData.buffer)
+                        audioDataSent++
+                        if (audioDataSent % 100 === 0) {
+                            console.log('Sent', audioDataSent, 'audio chunks to AI')
+                        }
                     } catch (error) {
                         console.error('Failed to send audio data:', error)
                     }
                 }
             }
             
-            // Connect source to processor but NOT to destination (to avoid feedback)
+            // Connect source to processor
             source.connect(processor)
-            // DO NOT connect processor to destination - this was causing the WebSocket errors
+            
+            // Connect processor to a gain node set to 0 to keep it active but silent
+            const silentGain = this.audioContext.createGain()
+            silentGain.gain.value = 0
+            processor.connect(silentGain)
+            silentGain.connect(this.audioContext.destination)
             
             // Store processor reference for cleanup
             this.audioProcessor = processor
@@ -585,6 +612,11 @@ export default class ConversationalAI
                     sum += dataArray[i]
                 }
                 this.inputLevel = sum / dataArray.length / 255
+                
+                // Log input level occasionally
+                if (Math.random() < 0.01) { // 1% chance to log
+                    console.log('Input level:', this.inputLevel)
+                }
                 
                 requestAnimationFrame(updateInputLevel)
             }
