@@ -214,63 +214,74 @@ export default class ConversationalAI
     
     createOffButton()
     {
-        // Create discrete off button
-        this.offButton = document.createElement('button')
-        this.offButton.className = 'ai-off-button'
-        this.offButton.innerHTML = '×'
-        this.offButton.title = 'Disconnect AI'
-        document.body.appendChild(this.offButton)
+        // Create discrete toggle button
+        this.toggleButton = document.createElement('button')
+        this.toggleButton.className = 'ai-toggle-button'
+        this.toggleButton.innerHTML = '<div class="ai-toggle-indicator"></div>'
+        this.toggleButton.title = 'Toggle AI Connection'
+        document.body.appendChild(this.toggleButton)
         
-        // Add off button styles
+        // Add toggle button styles
         const style = document.createElement('style')
         style.textContent = `
-            .ai-off-button {
+            .ai-toggle-button {
                 position: fixed;
                 bottom: 20px;
                 right: 20px;
-                width: 40px;
-                height: 40px;
+                width: 32px;
+                height: 32px;
                 border-radius: 50%;
-                border: 1px solid rgba(255, 255, 255, 0.2);
-                background: rgba(0, 0, 0, 0.7);
-                color: rgba(255, 255, 255, 0.6);
-                font-size: 24px;
-                font-weight: 300;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                background: rgba(0, 0, 0, 0.5);
                 cursor: pointer;
                 z-index: 1000;
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                transition: all 0.3s ease;
+                transition: all 0.2s ease;
                 backdrop-filter: blur(10px);
-                font-family: 'Ailerons', Helvetica, Arial, sans-serif;
+                opacity: 0.6;
             }
             
-            .ai-off-button:hover {
-                background: rgba(255, 0, 0, 0.2);
-                color: rgba(255, 255, 255, 0.9);
-                border-color: rgba(255, 0, 0, 0.4);
-                transform: scale(1.1);
+            .ai-toggle-button:hover {
+                opacity: 1;
+                transform: scale(1.05);
             }
             
-            .ai-off-button:active {
+            .ai-toggle-button:active {
                 transform: scale(0.95);
             }
             
-            .ai-off-button.hidden {
+            .ai-toggle-indicator {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: #ff6b6b;
+                transition: background-color 0.3s ease;
+            }
+            
+            .ai-toggle-button.connected .ai-toggle-indicator {
+                background: #00ff88;
+            }
+            
+            .ai-toggle-button.hidden {
                 opacity: 0;
                 pointer-events: none;
             }
         `
         document.head.appendChild(style)
         
-        // Add click handler
-        this.offButton.addEventListener('click', () => {
-            this.disconnect()
+        // Add toggle handler
+        this.toggleButton.addEventListener('click', () => {
+            if (this.isConnected) {
+                this.disconnect()
+            } else {
+                this.autoInit()
+            }
         })
         
-        // Hide button initially (show only when connected)
-        this.offButton.classList.add('hidden')
+        // Show button immediately (always visible)
+        // Red dot = disconnected, Green dot = connected
     }
     
     disconnect()
@@ -283,9 +294,10 @@ export default class ConversationalAI
         this.isConnected = false
         this.isSpeaking = false
         
-        // Hide off button
-        if (this.offButton) {
-            this.offButton.classList.add('hidden')
+        // Update toggle button to show disconnected state
+        if (this.toggleButton) {
+            this.toggleButton.classList.remove('connected')
+            this.toggleButton.title = 'Connect AI'
         }
         
         console.log('AI conversation disconnected')
@@ -371,9 +383,10 @@ export default class ConversationalAI
             
             this.hideSplash()
             
-            // Show off button when connected
-            if (this.offButton) {
-                this.offButton.classList.remove('hidden')
+            // Update toggle button to show connected state
+            if (this.toggleButton) {
+                this.toggleButton.classList.add('connected')
+                this.toggleButton.title = 'Disconnect AI'
             }
             
         } catch (error) {
@@ -408,9 +421,10 @@ export default class ConversationalAI
                     console.log('AI conversation connected')
                     this.isConnected = true
                     
-                    // Show off button
-                    if (this.offButton) {
-                        this.offButton.classList.remove('hidden')
+                    // Update toggle button
+                    if (this.toggleButton) {
+                        this.toggleButton.classList.add('connected')
+                        this.toggleButton.title = 'Disconnect AI'
                     }
                     
                     resolve()
@@ -420,9 +434,10 @@ export default class ConversationalAI
                     this.isConnected = false
                     this.isSpeaking = false
                     
-                    // Hide off button
-                    if (this.offButton) {
-                        this.offButton.classList.add('hidden')
+                    // Update toggle button
+                    if (this.toggleButton) {
+                        this.toggleButton.classList.remove('connected')
+                        this.toggleButton.title = 'Connect AI'
                     }
                 },
                 onError: (error) => {
@@ -493,8 +508,8 @@ export default class ConversationalAI
             this.splash.remove()
         }
         
-        if (this.offButton) {
-            this.offButton.remove()
+        if (this.toggleButton) {
+            this.toggleButton.remove()
         }
     }
 }
