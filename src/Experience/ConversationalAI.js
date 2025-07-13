@@ -415,44 +415,73 @@ export default class ConversationalAI
         
         console.log('Starting audio streaming...')
         
-        // Create audio context
-        this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
-            sampleRate: 16000
-        })
-        
-        // Create media stream source
-        const source = this.audioContext.createMediaStreamSource(this.stream)
-        
-        // Create script processor (exactly as in ElevenLabs docs)
-        const processor = this.audioContext.createScriptProcessor(1024, 1, 1)
-        
-        processor.onaudioprocess = (event) => {
-            if (this.websocket && this.websocket.readyState === WebSocket.OPEN && !this.isSpeaking) {
-                const inputBuffer = event.inputBuffer
-                const inputData = inputBuffer.getChannelData(0)
-                
-                // Convert to 16-bit PCM (exactly as in docs)
-                const pcmData = new Int16Array(inputData.length)
-                for (let i = 0; i < inputData.length; i++) {
-                    const sample = Math.max(-1, Math.min(1, inputData[i]))
-                    pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF
+        // Try MediaRecorder approach - simpler and more reliable
+        try {
+            this.mediaRecorder = new MediaRecorder(this.stream, {
+                mimeType: 'audio/webm;codecs=pcm',
+                audioBitsPerSecond: 16000
+            })
+            
+            this.mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0 && this.websocket && this.websocket.readyState === WebSocket.OPEN && !this.isSpeaking) {
+                    // Convert webm to raw PCM
+                    this.convertToPCM(event.data)
                 }
-                
-                // Send raw binary data
+            }
+            
+            this.mediaRecorder.start(100) // 100ms chunks
+            console.log('MediaRecorder started')
+            
+        } catch (error) {
+            console.error('MediaRecorder failed, falling back to manual approach:', error)
+            this.fallbackAudioStreaming()
+        }
+    }
+    
+    async convertToPCM(webmBlob)
+    {
+        try {
+            const arrayBuffer = await webmBlob.arrayBuffer()
+            
+            // Create audio context for conversion
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000
+                })
+            }
+            
+            const audioBuffer = await this.audioContext.decodeAudioData(arrayBuffer)
+            const channelData = audioBuffer.getChannelData(0)
+            
+            // Convert to 16-bit PCM
+            const pcmData = new Int16Array(channelData.length)
+            for (let i = 0; i < channelData.length; i++) {
+                const sample = Math.max(-1, Math.min(1, channelData[i]))
+                pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF
+            }
+            
+            // Send to ElevenLabs
+            if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                 this.websocket.send(pcmData.buffer)
             }
+            
+        } catch (error) {
+            console.error('PCM conversion failed:', error)
         }
+    }
+    
+    fallbackAudioStreaming()
+    {
+        // Fallback to basic approach - just send silence to keep connection alive
+        console.log('Using fallback audio streaming (silence)')
         
-        // Connect source to processor (but NOT to destination)
-        source.connect(processor)
-        
-        // Create a silent gain node to keep processor active
-        const silentGain = this.audioContext.createGain()
-        silentGain.gain.value = 0
-        processor.connect(silentGain)
-        silentGain.connect(this.audioContext.destination)
-        
-        this.audioProcessor = processor
+        this.silenceInterval = setInterval(() => {
+            if (this.websocket && this.websocket.readyState === WebSocket.OPEN && !this.isSpeaking) {
+                // Send small silence buffer
+                const silenceBuffer = new Int16Array(1024).fill(0)
+                this.websocket.send(silenceBuffer.buffer)
+            }
+        }, 100)
     }
     
     async playAudio(audioBase64)
@@ -469,6 +498,13 @@ export default class ConversationalAI
             
             // Convert raw PCM to AudioBuffer
             const pcmData = new Int16Array(bytes.buffer)
+            
+            if (!this.audioContext) {
+                this.audioContext = new (window.AudioContext || window.webkitAudioContext)({
+                    sampleRate: 16000
+                })
+            }
+            
             const audioBuffer = this.audioContext.createBuffer(1, pcmData.length, 16000)
             const channelData = audioBuffer.getChannelData(0)
             
@@ -516,12 +552,16 @@ export default class ConversationalAI
     
     destroy()
     {
-        if (this.websocket) {
-            this.websocket.close()
+        if (this.mediaRecorder) {
+            this.mediaRecorder.stop()
         }
         
-        if (this.audioProcessor) {
-            this.audioProcessor.disconnect()
+        if (this.silenceInterval) {
+            clearInterval(this.silenceInterval)
+        }
+        
+        if (this.websocket) {
+            this.websocket.close()
         }
         
         if (this.stream) {
