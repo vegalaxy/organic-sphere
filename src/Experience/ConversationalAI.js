@@ -26,6 +26,7 @@ export default class ConversationalAI
         
         // Auto-initialize
         this.createSplashScreen()
+        this.createOffButton()
         this.autoInit()
     }
     
@@ -211,6 +212,85 @@ export default class ConversationalAI
         document.head.appendChild(style)
     }
     
+    createOffButton()
+    {
+        // Create discrete off button
+        this.offButton = document.createElement('button')
+        this.offButton.className = 'ai-off-button'
+        this.offButton.innerHTML = '×'
+        this.offButton.title = 'Disconnect AI'
+        document.body.appendChild(this.offButton)
+        
+        // Add off button styles
+        const style = document.createElement('style')
+        style.textContent = `
+            .ai-off-button {
+                position: fixed;
+                bottom: 20px;
+                right: 20px;
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                background: rgba(0, 0, 0, 0.7);
+                color: rgba(255, 255, 255, 0.6);
+                font-size: 24px;
+                font-weight: 300;
+                cursor: pointer;
+                z-index: 1000;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                transition: all 0.3s ease;
+                backdrop-filter: blur(10px);
+                font-family: 'Ailerons', Helvetica, Arial, sans-serif;
+            }
+            
+            .ai-off-button:hover {
+                background: rgba(255, 0, 0, 0.2);
+                color: rgba(255, 255, 255, 0.9);
+                border-color: rgba(255, 0, 0, 0.4);
+                transform: scale(1.1);
+            }
+            
+            .ai-off-button:active {
+                transform: scale(0.95);
+            }
+            
+            .ai-off-button.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+        `
+        document.head.appendChild(style)
+        
+        // Add click handler
+        this.offButton.addEventListener('click', () => {
+            this.disconnect()
+        })
+        
+        // Hide button initially (show only when connected)
+        this.offButton.classList.add('hidden')
+    }
+    
+    disconnect()
+    {
+        if (this.conversation) {
+            this.conversation.endSession()
+            this.conversation = null
+        }
+        
+        this.isConnected = false
+        this.isSpeaking = false
+        
+        // Hide off button
+        if (this.offButton) {
+            this.offButton.classList.add('hidden')
+        }
+        
+        console.log('AI conversation disconnected')
+    }
+    
     updateSplashStatus(status)
     {
         const statusElement = this.splash.querySelector('.ai-splash-status')
@@ -291,6 +371,11 @@ export default class ConversationalAI
             
             this.hideSplash()
             
+            // Show off button when connected
+            if (this.offButton) {
+                this.offButton.classList.remove('hidden')
+            }
+            
         } catch (error) {
             console.error('Auto-initialization failed:', error)
             this.updateSplashStatus('Connection failed')
@@ -322,12 +407,23 @@ export default class ConversationalAI
                 onConnect: () => {
                     console.log('AI conversation connected')
                     this.isConnected = true
+                    
+                    // Show off button
+                    if (this.offButton) {
+                        this.offButton.classList.remove('hidden')
+                    }
+                    
                     resolve()
                 },
                 onDisconnect: () => {
                     console.log('AI conversation disconnected')
                     this.isConnected = false
                     this.isSpeaking = false
+                    
+                    // Hide off button
+                    if (this.offButton) {
+                        this.offButton.classList.add('hidden')
+                    }
                 },
                 onError: (error) => {
                     console.error('ElevenLabs error:', error)
@@ -391,16 +487,14 @@ export default class ConversationalAI
     
     destroy()
     {
-        if (this.conversation) {
-            this.conversation.endSession()
-            this.conversation = null
-        }
+        this.disconnect()
         
         if (this.splash) {
             this.splash.remove()
         }
         
-        this.isConnected = false
-        this.isSpeaking = false
+        if (this.offButton) {
+            this.offButton.remove()
+        }
     }
 }
