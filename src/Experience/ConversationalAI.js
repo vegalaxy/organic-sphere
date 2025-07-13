@@ -379,6 +379,13 @@ export default class ConversationalAI
                                 console.log('AI response received')
                                 break
                                 
+                            case 'audio':
+                                console.log('Received audio data')
+                                if (message.audio_event && message.audio_event.audio_base_64) {
+                                    this.handleAudioResponse(message.audio_event.audio_base_64)
+                                }
+                                break
+                                
                             case 'error':
                                 console.error('ElevenLabs error:', message)
                                 reject(new Error(`ElevenLabs error: ${message.message}`))
@@ -387,10 +394,6 @@ export default class ConversationalAI
                     } catch (error) {
                         console.error('Failed to parse message:', error)
                     }
-                } else {
-                    // Binary audio data from AI
-                    console.log('Received audio data:', event.data.byteLength, 'bytes')
-                    this.handleAudioResponse(event.data)
                 }
             }
             
@@ -423,7 +426,19 @@ export default class ConversationalAI
     async handleAudioResponse(audioData)
     {
         try {
-            this.audioQueue.push(audioData)
+            // Handle base64 audio from ElevenLabs
+            if (typeof audioData === 'string') {
+                // Decode base64 to binary
+                const binaryString = atob(audioData)
+                const bytes = new Uint8Array(binaryString.length)
+                for (let i = 0; i < binaryString.length; i++) {
+                    bytes[i] = binaryString.charCodeAt(i)
+                }
+                this.audioQueue.push(bytes.buffer)
+            } else {
+                // Direct binary data
+                this.audioQueue.push(audioData)
+            }
             
             if (!this.isPlaying) {
                 this.playAudioQueue()
@@ -499,33 +514,37 @@ export default class ConversationalAI
         try {
             console.log('Starting audio streaming to AI...')
             
-            // Create audio processing pipeline for PCM data
+            // Create proper audio processing for ElevenLabs PCM format
             const source = this.audioContext.createMediaStreamSource(this.stream)
             
-            // Create ScriptProcessor for real-time audio processing
-            const processor = this.audioContext.createScriptProcessor(4096, 1, 1)
+            // Use smaller buffer for real-time streaming (1024 samples = ~64ms at 16kHz)
+            const processor = this.audioContext.createScriptProcessor(1024, 1, 1)
             
             processor.onaudioprocess = (event) => {
                 if (this.websocket && this.websocket.readyState === WebSocket.OPEN) {
                     const inputBuffer = event.inputBuffer
                     const inputData = inputBuffer.getChannelData(0)
                     
-                    // Convert float32 to int16 PCM
+                    // Convert float32 to int16 PCM (ElevenLabs expects signed 16-bit)
                     const pcmData = new Int16Array(inputData.length)
                     for (let i = 0; i < inputData.length; i++) {
-                        // Clamp to [-1, 1] and convert to 16-bit
+                        // Clamp and convert to signed 16-bit PCM
                         const sample = Math.max(-1, Math.min(1, inputData[i]))
-                        pcmData[i] = sample * 0x7FFF
+                        pcmData[i] = Math.round(sample * 32767)
                     }
                     
-                    // Send raw PCM data as binary
-                    this.websocket.send(pcmData.buffer)
+                    // Send as raw binary data (not base64, not JSON)
+                    try {
+                        this.websocket.send(pcmData.buffer)
+                    } catch (error) {
+                        console.error('Failed to send audio data:', error)
+                    }
                 }
             }
             
-            // Connect the audio pipeline
+            // Connect audio pipeline
             source.connect(processor)
-            processor.connect(this.audioContext.destination)
+            // Don't connect to destination to avoid feedback
             
             // Store reference for cleanup
             this.audioProcessor = processor
