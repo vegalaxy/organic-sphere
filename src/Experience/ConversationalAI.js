@@ -33,46 +33,11 @@ export default class ConversationalAI
         this.audioWorkletNode = null
         this.stream = null
         
-        if(this.debug)
-        {
-            this.debugFolder = this.debug.addFolder({
-                title: 'Conversational AI',
-                expanded: true
-            })
-            
-            this.debugFolder.addButton({
-                title: 'Test Connection'
-            }).on('click', () => {
-                console.log('=== CONNECTION TEST ===')
-                console.log('Agent ID:', this.agentId)
-                console.log('API Key present:', !!this.apiKey)
-                console.log('API Key length:', this.apiKey?.length)
-                console.log('Audio Context State:', this.audioContext?.state)
-                console.log('Stream active:', !!this.stream)
-                console.log('WebSocket state:', this.websocket?.readyState)
-                console.log('Is connected:', this.isConnected)
-            })
-            
-            this.debugFolder.addButton({
-                title: 'Start Conversation'
-            }).on('click', () => {
-                this.startConversation()
-            })
-            
-            this.debugFolder.addButton({
-                title: 'End Conversation'
-            }).on('click', () => {
-                this.endConversation()
-            })
-            
-            // Add connection status display
-            this.connectionStatus = { status: 'Disconnected' }
-            this.debugFolder.addMonitor(this.connectionStatus, 'status', {
-                label: 'Connection'
-            })
-        }
+        // UI Elements
+        this.ui = {}
         
         this.init()
+        this.createUI()
     }
     
     async init()
@@ -95,106 +60,347 @@ export default class ConversationalAI
             })
             
             console.log('ConversationalAI initialized successfully')
+            this.updateUIStatus('Ready to connect')
             
         } catch (error) {
             console.error('Failed to initialize ConversationalAI:', error)
-            if(this.debug) {
-                this.connectionStatus.status = 'Init Error: ' + error.message
+            this.updateUIStatus('Microphone access denied')
+        }
+    }
+    
+    createUI()
+    {
+        // Main container
+        this.ui.container = document.createElement('div')
+        this.ui.container.className = 'ai-controls'
+        document.body.appendChild(this.ui.container)
+        
+        // Status indicator
+        this.ui.status = document.createElement('div')
+        this.ui.status.className = 'ai-status'
+        this.ui.status.textContent = 'Initializing...'
+        this.ui.container.appendChild(this.ui.status)
+        
+        // Main button
+        this.ui.button = document.createElement('button')
+        this.ui.button.className = 'ai-button'
+        this.ui.button.innerHTML = `
+            <div class="ai-button-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                </svg>
+            </div>
+            <span class="ai-button-text">Start Conversation</span>
+        `
+        this.ui.container.appendChild(this.ui.button)
+        
+        // Audio visualizer
+        this.ui.visualizer = document.createElement('div')
+        this.ui.visualizer.className = 'ai-visualizer'
+        this.ui.container.appendChild(this.ui.visualizer)
+        
+        // Create visualizer bars
+        for (let i = 0; i < 5; i++) {
+            const bar = document.createElement('div')
+            bar.className = 'ai-visualizer-bar'
+            this.ui.visualizer.appendChild(bar)
+        }
+        
+        // Event listeners
+        this.ui.button.addEventListener('click', () => {
+            if (this.isConnected) {
+                this.endConversation()
+            } else {
+                this.startConversation()
             }
+        })
+        
+        // Add styles
+        this.addStyles()
+    }
+    
+    addStyles()
+    {
+        const style = document.createElement('style')
+        style.textContent = `
+            .ai-controls {
+                position: fixed;
+                bottom: 30px;
+                right: 30px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 15px;
+                z-index: 1000;
+                font-family: 'Roboto', sans-serif;
+            }
+            
+            .ai-status {
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-size: 12px;
+                font-weight: 300;
+                backdrop-filter: blur(10px);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                transition: all 0.3s ease;
+            }
+            
+            .ai-status.connected {
+                background: rgba(0, 255, 136, 0.2);
+                border-color: rgba(0, 255, 136, 0.3);
+                color: #00ff88;
+            }
+            
+            .ai-status.speaking {
+                background: rgba(255, 102, 0, 0.2);
+                border-color: rgba(255, 102, 0, 0.3);
+                color: #ff6600;
+            }
+            
+            .ai-button {
+                width: 80px;
+                height: 80px;
+                border-radius: 50%;
+                border: none;
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color: white;
+                cursor: pointer;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                gap: 4px;
+                transition: all 0.3s ease;
+                box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+                backdrop-filter: blur(10px);
+                position: relative;
+                overflow: hidden;
+            }
+            
+            .ai-button:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+            }
+            
+            .ai-button:active {
+                transform: translateY(0);
+            }
+            
+            .ai-button.connected {
+                background: linear-gradient(135deg, #00ff88 0%, #00cc6a 100%);
+                animation: pulse 2s infinite;
+            }
+            
+            .ai-button.speaking {
+                background: linear-gradient(135deg, #ff6600 0%, #ff4400 100%);
+                animation: speaking 0.5s infinite alternate;
+            }
+            
+            .ai-button-icon {
+                font-size: 24px;
+                transition: transform 0.3s ease;
+            }
+            
+            .ai-button-text {
+                font-size: 8px;
+                font-weight: 300;
+                text-transform: uppercase;
+                letter-spacing: 0.5px;
+                opacity: 0.9;
+            }
+            
+            .ai-visualizer {
+                display: flex;
+                gap: 3px;
+                height: 30px;
+                align-items: end;
+                opacity: 0;
+                transition: opacity 0.3s ease;
+            }
+            
+            .ai-visualizer.active {
+                opacity: 1;
+            }
+            
+            .ai-visualizer-bar {
+                width: 3px;
+                background: linear-gradient(to top, #667eea, #764ba2);
+                border-radius: 2px;
+                transition: height 0.1s ease;
+                height: 4px;
+                min-height: 4px;
+            }
+            
+            @keyframes pulse {
+                0% { box-shadow: 0 8px 32px rgba(0, 255, 136, 0.3); }
+                50% { box-shadow: 0 8px 32px rgba(0, 255, 136, 0.6); }
+                100% { box-shadow: 0 8px 32px rgba(0, 255, 136, 0.3); }
+            }
+            
+            @keyframes speaking {
+                0% { transform: scale(1); }
+                100% { transform: scale(1.05); }
+            }
+            
+            @media (max-width: 768px) {
+                .ai-controls {
+                    bottom: 20px;
+                    right: 20px;
+                }
+                
+                .ai-button {
+                    width: 60px;
+                    height: 60px;
+                }
+                
+                .ai-button-icon {
+                    font-size: 20px;
+                }
+                
+                .ai-button-text {
+                    font-size: 7px;
+                }
+            }
+        `
+        document.head.appendChild(style)
+    }
+    
+    updateUIStatus(status)
+    {
+        if (this.ui.status) {
+            this.ui.status.textContent = status
+            
+            // Update status styling
+            this.ui.status.className = 'ai-status'
+            if (this.isConnected) {
+                this.ui.status.classList.add('connected')
+            }
+            if (this.isSpeaking) {
+                this.ui.status.classList.add('speaking')
+            }
+        }
+    }
+    
+    updateUIButton()
+    {
+        if (this.ui.button) {
+            const icon = this.ui.button.querySelector('.ai-button-icon svg')
+            const text = this.ui.button.querySelector('.ai-button-text')
+            
+            this.ui.button.className = 'ai-button'
+            
+            if (this.isConnected) {
+                this.ui.button.classList.add('connected')
+                text.textContent = 'End Chat'
+                
+                if (this.isSpeaking) {
+                    this.ui.button.classList.add('speaking')
+                    icon.innerHTML = `
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M12 1v6m0 6v6"></path>
+                        <path d="m21 21-6-6m0 0L9 9m6 6 6-6M9 9l-6 6"></path>
+                    `
+                } else {
+                    icon.innerHTML = `
+                        <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                        <line x1="12" y1="19" x2="12" y2="23"></line>
+                        <line x1="8" y1="23" x2="16" y2="23"></line>
+                    `
+                }
+            } else {
+                text.textContent = 'Start Conversation'
+                icon.innerHTML = `
+                    <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
+                    <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                    <line x1="12" y1="19" x2="12" y2="23"></line>
+                    <line x1="8" y1="23" x2="16" y2="23"></line>
+                `
+            }
+        }
+    }
+    
+    updateVisualizer()
+    {
+        if (!this.ui.visualizer) return
+        
+        const bars = this.ui.visualizer.querySelectorAll('.ai-visualizer-bar')
+        const level = this.getCombinedLevel()
+        
+        if (this.isConnected && level > 0.01) {
+            this.ui.visualizer.classList.add('active')
+            
+            bars.forEach((bar, index) => {
+                const height = Math.max(4, level * 30 * (1 + Math.sin(Date.now() * 0.01 + index) * 0.5))
+                bar.style.height = `${height}px`
+                
+                if (this.isSpeaking) {
+                    bar.style.background = 'linear-gradient(to top, #ff6600, #ff4400)'
+                } else {
+                    bar.style.background = 'linear-gradient(to top, #00ff88, #00cc6a)'
+                }
+            })
+        } else {
+            this.ui.visualizer.classList.remove('active')
         }
     }
     
     async startConversation()
     {
-        if (this.isConnected) {
-            console.log('Already connected')
-            return
-        }
-        
-        // Validate credentials
-        if (!this.agentId || !this.apiKey) {
-            console.error('Missing credentials - Agent ID:', this.agentId, 'API Key:', this.apiKey ? 'Present' : 'Missing')
-            if(this.debug) {
-                this.connectionStatus.status = 'Missing Credentials'
-            }
-            return
-        }
-        
-        console.log('Using Agent ID:', this.agentId)
-        console.log('API Key length:', this.apiKey.length)
+        if (this.isConnected) return
         
         try {
-            console.log('Starting conversation...')
-            if(this.debug) {
-                this.connectionStatus.status = 'Connecting...'
-            }
+            this.updateUIStatus('Connecting...')
             
             // Resume audio context if suspended
             if (this.audioContext.state === 'suspended') {
                 await this.audioContext.resume()
             }
             
-            // Create WebSocket connection following official guide
+            // Create WebSocket connection
             const wsUrl = `wss://api.elevenlabs.io/v1/convai/conversation?agent_id=${this.agentId}`
-            console.log('Connecting to:', wsUrl)
-            
             this.websocket = new WebSocket(wsUrl)
             
             this.websocket.onopen = async () => {
-                console.log('WebSocket connected')
-                console.log('WebSocket readyState:', this.websocket.readyState)
-                if(this.debug) {
-                    this.connectionStatus.status = 'Authenticating...'
-                }
+                this.updateUIStatus('Authenticating...')
                 
-                // Send authentication message following official guide
+                // Send authentication
                 const authMessage = {
                     type: 'auth',
                     xi_api_key: this.apiKey
                 }
-                
-                console.log('Sending auth:', authMessage)
-                console.log('Auth message stringified:', JSON.stringify(authMessage))
                 this.websocket.send(JSON.stringify(authMessage))
             }
             
             this.websocket.onmessage = (event) => {
-                console.log('Raw WebSocket message received:', event)
-                console.log('Message data type:', typeof event.data)
-                console.log('Message data:', event.data)
                 this.handleWebSocketMessage(event)
             }
             
             this.websocket.onclose = (event) => {
-                console.log('WebSocket disconnected - Code:', event.code, 'Reason:', event.reason)
-                console.log('Was clean close:', event.wasClean)
                 this.isConnected = false
                 this.stopRecording()
-                if(this.debug) {
-                    this.connectionStatus.status = `Disconnected (${event.code})`
-                }
+                this.updateUIStatus('Disconnected')
+                this.updateUIButton()
             }
             
             this.websocket.onerror = (error) => {
-                console.error('WebSocket error details:', error)
-                console.error('WebSocket state when error occurred:', this.websocket?.readyState)
-                if(this.debug) {
-                    this.connectionStatus.status = 'Connection Error'
-                }
+                console.error('WebSocket error:', error)
+                this.updateUIStatus('Connection failed')
             }
             
         } catch (error) {
             console.error('Failed to start conversation:', error)
-            if(this.debug) {
-                this.connectionStatus.status = 'Error: ' + error.message
-            }
+            this.updateUIStatus('Error: ' + error.message)
         }
     }
     
     endConversation()
     {
-        console.log('Ending conversation...')
-        
         if (this.websocket) {
             this.websocket.close()
             this.websocket = null
@@ -205,9 +411,8 @@ export default class ConversationalAI
         this.isSpeaking = false
         this.outputLevel = 0
         
-        if(this.debug) {
-            this.connectionStatus.status = 'Disconnected'
-        }
+        this.updateUIStatus('Disconnected')
+        this.updateUIButton()
     }
     
     handleWebSocketMessage(event)
@@ -215,17 +420,12 @@ export default class ConversationalAI
         if (typeof event.data === 'string') {
             try {
                 const message = JSON.parse(event.data)
-                console.log('Parsed JSON message:', message)
-                console.log('Message type:', message.type)
                 
                 switch (message.type) {
                     case 'conversation_initiation_metadata':
-                        console.log('Conversation initiated:', message)
                         this.isConnected = true
-                        if(this.debug) {
-                            this.connectionStatus.status = 'Connected'
-                        }
-                        console.log('Starting recording after conversation initiation...')
+                        this.updateUIStatus('Connected - Speak now!')
+                        this.updateUIButton()
                         this.startRecording()
                         break
                         
@@ -234,32 +434,23 @@ export default class ConversationalAI
                         break
                         
                     case 'user_transcript':
-                        console.log('User transcript:', message.user_transcript)
+                        this.updateUIStatus(`You: "${message.user_transcript}"`)
                         break
                         
                     case 'internal_tentative_agent_response':
-                        console.log('Tentative response:', message.tentative_agent_response)
+                        this.updateUIStatus('AI is thinking...')
                         break
                         
                     case 'error':
                         console.error('ElevenLabs error:', message)
-                        console.error('Error details:', message.message, message.code)
-                        if(this.debug) {
-                            this.connectionStatus.status = 'Error: ' + message.message
-                        }
+                        this.updateUIStatus('Error: ' + message.message)
                         break
-                        
-                    default:
-                        console.log('Unknown message type:', message.type, message)
                 }
             } catch (error) {
-                console.error('Failed to parse WebSocket message:', error)
-                console.error('Raw message data:', event.data)
+                console.error('Failed to parse message:', error)
             }
         } else {
-            // Binary audio data from agent
-            console.log('Received binary audio data:', event.data.byteLength, 'bytes')
-            console.log('Audio data type:', event.data.constructor.name)
+            // Binary audio data
             this.handleAudioResponse(event.data)
         }
     }
@@ -267,10 +458,8 @@ export default class ConversationalAI
     async handleAudioResponse(audioData)
     {
         try {
-            // Add to audio queue
             this.audioQueue.push(audioData)
             
-            // Start playing if not already playing
             if (!this.isPlaying) {
                 this.playAudioQueue()
             }
@@ -286,27 +475,31 @@ export default class ConversationalAI
             this.isPlaying = false
             this.isSpeaking = false
             this.outputLevel = 0
+            this.updateUIStatus('Listening...')
+            this.updateUIButton()
             return
         }
         
         this.isPlaying = true
         this.isSpeaking = true
+        this.updateUIStatus('AI is speaking...')
+        this.updateUIButton()
         
         const audioData = this.audioQueue.shift()
         
         try {
-            // Create audio buffer from PCM data
+            // Create audio buffer
             const audioBuffer = this.audioContext.createBuffer(1, audioData.byteLength / 2, 16000)
             const channelData = audioBuffer.getChannelData(0)
             
-            // Convert from 16-bit PCM to float32
+            // Convert PCM to float32
             const view = new DataView(audioData)
             for (let i = 0; i < channelData.length; i++) {
-                const sample = view.getInt16(i * 2, true) // little-endian
-                channelData[i] = sample / 32768.0 // Convert to -1.0 to 1.0 range
+                const sample = view.getInt16(i * 2, true)
+                channelData[i] = sample / 32768.0
             }
             
-            // Create audio source
+            // Play audio
             const source = this.audioContext.createBufferSource()
             const gainNode = this.audioContext.createGain()
             const analyser = this.audioContext.createAnalyser()
@@ -316,7 +509,7 @@ export default class ConversationalAI
             gainNode.connect(analyser)
             analyser.connect(this.audioContext.destination)
             
-            // Set up audio analysis for visualization
+            // Audio analysis
             analyser.fftSize = 256
             const dataArray = new Uint8Array(analyser.frequencyBinCount)
             
@@ -334,11 +527,9 @@ export default class ConversationalAI
             }
             updateOutputLevel()
             
-            // Play audio
             source.start()
             
             source.onended = () => {
-                // Continue with next audio in queue
                 setTimeout(() => {
                     this.playAudioQueue()
                 }, 50)
@@ -346,22 +537,15 @@ export default class ConversationalAI
             
         } catch (error) {
             console.error('Failed to play audio:', error)
-            // Continue with next audio in queue
             this.playAudioQueue()
         }
     }
     
     async startRecording()
     {
-        if (!this.stream || this.isRecording) {
-            console.log('Cannot start recording - no stream or already recording')
-            return
-        }
+        if (!this.stream || this.isRecording) return
         
         try {
-            console.log('Starting audio recording...')
-            
-            // Create audio processing pipeline following official guide
             const source = this.audioContext.createMediaStreamSource(this.stream)
             const processor = this.audioContext.createScriptProcessor(4096, 1, 1)
             
@@ -372,20 +556,16 @@ export default class ConversationalAI
                 
                 const inputBuffer = event.inputBuffer.getChannelData(0)
                 
-                // Convert float32 to 16-bit PCM following official guide
+                // Convert to PCM
                 const pcmData = new Int16Array(inputBuffer.length)
                 for (let i = 0; i < inputBuffer.length; i++) {
                     const sample = Math.max(-1, Math.min(1, inputBuffer[i]))
                     pcmData[i] = sample < 0 ? sample * 0x8000 : sample * 0x7FFF
                 }
                 
-                // Send PCM data to ElevenLabs
-                if (pcmData.byteLength > 0) {
-                    console.log('Sending audio chunk:', pcmData.byteLength, 'bytes')
-                }
                 this.websocket.send(pcmData.buffer)
                 
-                // Update input level for visualization
+                // Update input level
                 let sum = 0
                 for (let i = 0; i < inputBuffer.length; i++) {
                     sum += Math.abs(inputBuffer[i])
@@ -398,8 +578,6 @@ export default class ConversationalAI
             
             this.audioProcessor = processor
             this.isRecording = true
-            
-            console.log('Recording started successfully')
             
         } catch (error) {
             console.error('Failed to start recording:', error)
@@ -415,16 +593,13 @@ export default class ConversationalAI
         
         this.isRecording = false
         this.inputLevel = 0
-        console.log('Recording stopped')
     }
     
-    // Get combined audio level for sphere visualization
     getCombinedLevel()
     {
         return Math.max(this.inputLevel, this.outputLevel)
     }
     
-    // Check if AI is currently speaking
     isAISpeaking()
     {
         return this.isSpeaking
@@ -432,7 +607,7 @@ export default class ConversationalAI
     
     update()
     {
-        // Audio levels are updated in real-time via the audio processing callbacks
+        this.updateVisualizer()
     }
     
     destroy()
@@ -445,6 +620,10 @@ export default class ConversationalAI
         
         if (this.audioContext) {
             this.audioContext.close()
+        }
+        
+        if (this.ui.container) {
+            this.ui.container.remove()
         }
     }
 }
