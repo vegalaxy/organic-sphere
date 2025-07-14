@@ -8,20 +8,29 @@ export default class Microphone
         this.debug = this.experience.debug
         this.ready = false
         this.volume = 0
-        this.levels = []
+        this.levels = [0, 0, 0, 0, 0, 0, 0, 0] // Initialize with default values
+        this.stream = null
+        this.audioContext = null
+        this.analyserNode = null
 
         navigator.mediaDevices
             .getUserMedia({ audio: true, video: false })
             .then((_stream) =>
             {
                 this.stream = _stream
-
                 this.init()
-
+                
                 if(this.debug)
                 {
                     this.setSpectrum()
                 }
+            })
+            .catch((error) =>
+            {
+                console.warn('Microphone access denied or failed:', error)
+                // Set default values so the app continues to work
+                this.ready = false
+                this.levels = [0, 0, 0, 0, 0, 0, 0, 0]
             })
     }
 
@@ -124,7 +133,13 @@ export default class Microphone
     update()
     {
         if(!this.ready)
+        {
+            // Ensure levels array exists even when not ready
+            if (!this.levels) {
+                this.levels = [0, 0, 0, 0, 0, 0, 0, 0]
+            }
             return
+        }
 
         // Retrieve audio data
         this.analyserNode.getByteFrequencyData(this.byteFrequencyData)

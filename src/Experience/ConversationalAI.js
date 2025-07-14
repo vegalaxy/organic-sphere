@@ -8,7 +8,7 @@ export default class ConversationalAI
         this.experience = new Experience()
         this.debug = this.experience.debug
         
-        // ElevenLabs configuration
+        // ElevenLabs configuration - Replace with your actual credentials
         this.agentId = 'VKkqHVzHTMdhYVGSj8am'
         this.apiKey = 'sk_5eb294966f9b6ff79344c6fd5addb3edc4a97e5bceb339cc'
         
@@ -358,7 +358,9 @@ export default class ConversationalAI
     {
         try {
             // Check credentials first
-            if (this.agentId === 'YOUR_AGENT_ID_HERE' || this.apiKey === 'YOUR_API_KEY_HERE') {
+            if (!this.agentId || !this.apiKey || 
+                this.agentId === 'YOUR_AGENT_ID_HERE' || 
+                this.apiKey === 'YOUR_API_KEY_HERE') {
                 throw new Error('Please update your ElevenLabs Agent ID and API Key in ConversationalAI.js')
             }
             
@@ -396,11 +398,11 @@ export default class ConversationalAI
             
             let errorMessage = 'Connection failed. Please check your internet connection.'
             
-            if (error.message.includes('Agent ID') || error.message.includes('API Key')) {
+            if (error.message && (error.message.includes('Agent ID') || error.message.includes('API Key'))) {
                 errorMessage = 'Please update your ElevenLabs credentials in the code.'
-            } else if (error.message.includes('microphone')) {
+            } else if (error.message && error.message.includes('microphone')) {
                 errorMessage = 'Microphone access denied. Please allow microphone access and retry.'
-            } else if (error.message.includes('agent')) {
+            } else if (error.message && error.message.includes('agent')) {
                 errorMessage = 'Failed to connect to ElevenLabs. Please check your API key and agent ID.'
             }
             
@@ -445,19 +447,21 @@ export default class ConversationalAI
                     reject(new Error(`ElevenLabs error: ${error.message || error}`))
                 },
                 onModeChange: (mode) => {
-                    console.log('AI mode changed:', mode.mode)
-                    this.isSpeaking = mode.mode === 'speaking'
+                    if (mode && mode.mode) {
+                        console.log('AI mode changed:', mode.mode)
+                        this.isSpeaking = mode.mode === 'speaking'
                     
-                    // Update audio levels based on mode
-                    if (mode.mode === 'speaking') {
-                        this.outputLevel = 0.8
-                        this.inputLevel = 0
-                    } else if (mode.mode === 'listening') {
-                        this.outputLevel = 0
-                        this.inputLevel = 0.5
-                    } else {
-                        this.outputLevel = 0
-                        this.inputLevel = 0
+                        // Update audio levels based on mode
+                        if (mode.mode === 'speaking') {
+                            this.outputLevel = 0.8
+                            this.inputLevel = 0
+                        } else if (mode.mode === 'listening') {
+                            this.outputLevel = 0
+                            this.inputLevel = 0.5
+                        } else {
+                            this.outputLevel = 0
+                            this.inputLevel = 0
+                        }
                     }
                 }
             }).then((conversation) => {

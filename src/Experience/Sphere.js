@@ -52,7 +52,7 @@ export default class Sphere
         {
             // Use combined level from both microphone and AI audio
             let micLevel = 0
-            if (this.microphone.ready) {
+            if (this.microphone && this.microphone.ready) {
                 const level0 = this.microphone.levels[0] || 0
                 const level1 = this.microphone.levels[1] || 0
                 const level2 = this.microphone.levels[2] || 0
@@ -98,7 +98,7 @@ export default class Sphere
         this.variations.lowLevel.downEasing = 0.002
         this.variations.lowLevel.getValue = () =>
         {
-            let value = this.microphone.levels[0] || 0
+            let value = (this.microphone && this.microphone.levels) ? this.microphone.levels[0] || 0 : 0
             value *= 0.003
             value += 0.0001
             value = Math.max(0, value)
@@ -117,7 +117,7 @@ export default class Sphere
         this.variations.mediumLevel.downEasing = 0.004
         this.variations.mediumLevel.getValue = () =>
         {
-            let value = this.microphone.levels[1] || 0
+            let value = (this.microphone && this.microphone.levels) ? this.microphone.levels[1] || 0 : 0
             value *= 2
             value += 3.587
             value = Math.max(3.587, value)
@@ -136,7 +136,7 @@ export default class Sphere
         this.variations.highLevel.downEasing = 0.001
         this.variations.highLevel.getValue = () =>
         {
-            let value = this.microphone.levels[2] || 0
+            let value = (this.microphone && this.microphone.levels) ? this.microphone.levels[2] || 0 : 0
             value *= 5
             value += 0.5
             value = Math.max(0.5, value)
@@ -345,7 +345,7 @@ export default class Sphere
         for(let _variationName in this.variations)
         {
             const variation = this.variations[_variationName]
-            variation.target = this.microphone.ready ? variation.getValue() : variation.getDefault()
+            variation.target = (this.microphone && this.microphone.ready) ? variation.getValue() : variation.getDefault()
             
             const easing = variation.target > variation.current ? variation.upEasing : variation.downEasing
             variation.current += (variation.target - variation.current) * easing * this.time.delta

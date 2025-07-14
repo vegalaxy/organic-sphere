@@ -44,7 +44,7 @@ export default class Experience
         this.setCamera()
         this.setRenderer()
         this.setResources()
-        this.setMicrohopne()
+        this.setMicrophone()
         this.setConversationalAI()
         this.setWorld()
         
@@ -113,6 +113,11 @@ export default class Experience
 
     setMicrohopne()
     {
+        this.setMicrophone()
+    }
+
+    setMicrophone()
+    {
         this.microphone = new Microphone()
     }
 
@@ -169,8 +174,6 @@ export default class Experience
         if(this.world)
             this.world.resize()
 
-        if(this.world)
-            this.world.resize()
     }
 
     destroy()

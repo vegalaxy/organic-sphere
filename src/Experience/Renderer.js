@@ -164,7 +164,7 @@ void main() {
                 .addInput(
                     this.postProcess.unrealBloomPass.tintColor,
                     'value',
-                    { view: 'uTintColor', label: 'color' }
+                    { view: 'color', label: 'tintColor' }
                 )
                 .on('change', () =>
                 {
