@@ -2,7 +2,6 @@ import * as THREE from 'three'
 import Experience from './Experience'
 import vertexShader from './shaders/sphere/vertex.glsl'
 import fragmentShader from './shaders/sphere/fragment.glsl'
-import enhancedFragmentShader from './shaders/sphere/enhancedFragment.glsl'
 
 export default class Sphere
 {
@@ -18,16 +17,6 @@ export default class Sphere
         this.timeFrequency = 0.0003
         this.elapsedTime = 0
 
-        // Visual themes system
-        this.currentTheme = 'energetic'
-        this.themeTransition = {
-            progress: 0,
-            duration: 2000,
-            isTransitioning: false,
-            fromTheme: null,
-            toTheme: null
-        }
-
         if(this.debug)
         {
             this.debugFolder = this.debug.addFolder({
@@ -40,26 +29,8 @@ export default class Sphere
                 'timeFrequency',
                 { min: 0, max: 0.001, step: 0.000001 }
             )
-
-            // Theme selector
-            this.debugFolder.addInput(
-                this,
-                'currentTheme',
-                { 
-                    options: {
-                        Energetic: 'energetic',
-                        Calm: 'calm',
-                        Mysterious: 'mysterious',
-                        Professional: 'professional',
-                        Warm: 'warm'
-                    }
-                }
-            ).on('change', () => {
-                this.transitionToTheme(this.currentTheme)
-            })
         }
         
-        this.setThemes()
         this.setVariations()
         this.setGeometry()
         this.setLights()
@@ -68,160 +39,6 @@ export default class Sphere
         this.setMesh()
     }
 
-    setThemes()
-    {
-        this.themes = {
-            energetic: {
-                name: 'Energetic Assistant',
-                lightA: { color: '#00FF88', intensity: 2.2 },
-                lightB: { color: '#FF3366', intensity: 1.8 },
-                materialProps: {
-                    metallic: 0.8,
-                    roughness: 0.2,
-                    iridescence: 0.6,
-                    energyFlow: 1.0
-                },
-                distortion: { frequency: 1.8, strength: 0.8 },
-                displacement: { frequency: 2.5, strength: 0.18 },
-                fresnel: { offset: -1.4, multiplier: 4.2, power: 1.6 }
-            },
-            calm: {
-                name: 'Calm Therapist',
-                lightA: { color: '#4A90E2', intensity: 1.4 },
-                lightB: { color: '#F5A623', intensity: 1.2 },
-                materialProps: {
-                    metallic: 0.3,
-                    roughness: 0.7,
-                    iridescence: 0.2,
-                    energyFlow: 0.3
-                },
-                distortion: { frequency: 1.2, strength: 0.4 },
-                displacement: { frequency: 1.8, strength: 0.12 },
-                fresnel: { offset: -1.8, multiplier: 3.2, power: 2.1 }
-            },
-            mysterious: {
-                name: 'Mysterious Oracle',
-                lightA: { color: '#9013FE', intensity: 1.9 },
-                lightB: { color: '#00BCD4', intensity: 1.6 },
-                materialProps: {
-                    metallic: 0.9,
-                    roughness: 0.1,
-                    iridescence: 0.9,
-                    energyFlow: 0.7
-                },
-                distortion: { frequency: 2.2, strength: 0.9 },
-                displacement: { frequency: 1.6, strength: 0.16 },
-                fresnel: { offset: -1.2, multiplier: 4.8, power: 1.4 }
-            },
-            professional: {
-                name: 'Professional Assistant',
-                lightA: { color: '#2196F3', intensity: 1.6 },
-                lightB: { color: '#FFC107', intensity: 1.3 },
-                materialProps: {
-                    metallic: 0.6,
-                    roughness: 0.4,
-                    iridescence: 0.3,
-                    energyFlow: 0.5
-                },
-                distortion: { frequency: 1.5, strength: 0.5 },
-                displacement: { frequency: 2.0, strength: 0.14 },
-                fresnel: { offset: -1.6, multiplier: 3.8, power: 1.8 }
-            },
-            warm: {
-                name: 'Warm Companion',
-                lightA: { color: '#FF6B35', intensity: 1.7 },
-                lightB: { color: '#F7931E', intensity: 1.4 },
-                materialProps: {
-                    metallic: 0.4,
-                    roughness: 0.6,
-                    iridescence: 0.4,
-                    energyFlow: 0.6
-                },
-                distortion: { frequency: 1.3, strength: 0.6 },
-                displacement: { frequency: 2.2, strength: 0.15 },
-                fresnel: { offset: -1.7, multiplier: 3.5, power: 1.9 }
-            }
-        }
-    }
-
-    transitionToTheme(newTheme)
-    {
-        if (this.themeTransition.isTransitioning || newTheme === this.currentTheme) return
-        
-        this.themeTransition.fromTheme = this.currentTheme
-        this.themeTransition.toTheme = newTheme
-        this.themeTransition.progress = 0
-        this.themeTransition.isTransitioning = true
-        this.themeTransition.startTime = this.time.elapsed
-    }
-
-    updateThemeTransition()
-    {
-        if (!this.themeTransition.isTransitioning) return
-
-        const elapsed = this.time.elapsed - this.themeTransition.startTime
-        this.themeTransition.progress = Math.min(elapsed / this.themeTransition.duration, 1)
-        
-        // Smooth easing function
-        const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1
-        const easedProgress = easeInOutCubic(this.themeTransition.progress)
-        
-        if (this.themeTransition.progress >= 1) {
-            this.themeTransition.isTransitioning = false
-            this.currentTheme = this.themeTransition.toTheme
-        }
-        
-        return easedProgress
-    }
-
-    getCurrentThemeProps()
-    {
-        if (!this.themeTransition.isTransitioning) {
-            return this.themes[this.currentTheme]
-        }
-        
-        const progress = this.updateThemeTransition()
-        const fromTheme = this.themes[this.themeTransition.fromTheme]
-        const toTheme = this.themes[this.themeTransition.toTheme]
-        
-        // Interpolate between themes
-        const lerp = (a, b, t) => a + (b - a) * t
-        const lerpColor = (colorA, colorB, t) => {
-            const a = new THREE.Color(colorA)
-            const b = new THREE.Color(colorB)
-            return a.lerp(b, t)
-        }
-        
-        return {
-            lightA: {
-                color: lerpColor(fromTheme.lightA.color, toTheme.lightA.color, progress),
-                intensity: lerp(fromTheme.lightA.intensity, toTheme.lightA.intensity, progress)
-            },
-            lightB: {
-                color: lerpColor(fromTheme.lightB.color, toTheme.lightB.color, progress),
-                intensity: lerp(fromTheme.lightB.intensity, toTheme.lightB.intensity, progress)
-            },
-            materialProps: {
-                metallic: lerp(fromTheme.materialProps.metallic, toTheme.materialProps.metallic, progress),
-                roughness: lerp(fromTheme.materialProps.roughness, toTheme.materialProps.roughness, progress),
-                iridescence: lerp(fromTheme.materialProps.iridescence, toTheme.materialProps.iridescence, progress),
-                energyFlow: lerp(fromTheme.materialProps.energyFlow, toTheme.materialProps.energyFlow, progress)
-            },
-            distortion: {
-                frequency: lerp(fromTheme.distortion.frequency, toTheme.distortion.frequency, progress),
-                strength: lerp(fromTheme.distortion.strength, toTheme.distortion.strength, progress)
-            },
-            displacement: {
-                frequency: lerp(fromTheme.displacement.frequency, toTheme.displacement.frequency, progress),
-                strength: lerp(fromTheme.displacement.strength, toTheme.displacement.strength, progress)
-            },
-            fresnel: {
-                offset: lerp(fromTheme.fresnel.offset, toTheme.fresnel.offset, progress),
-                multiplier: lerp(fromTheme.fresnel.multiplier, toTheme.fresnel.multiplier, progress),
-                power: lerp(fromTheme.fresnel.power, toTheme.fresnel.power, progress)
-            }
-        }
-    }
     setVariations()
     {
         this.variations = {}
@@ -249,25 +66,6 @@ export default class Sphere
             
             const combinedLevel = Math.max(micLevel, aiLevel)
             return combinedLevel * 0.3
-        }
-        this.variations.volume.getDefault = () =>
-        {
-            return 0.152
-        }
-
-        // Enhanced color variation based on AI speaking state
-        this.variations.aiSpeaking = {}
-        this.variations.aiSpeaking.target = 0
-        this.variations.aiSpeaking.current = 0
-        this.variations.aiSpeaking.upEasing = 0.05
-        this.variations.aiSpeaking.downEasing = 0.02
-        this.variations.aiSpeaking.getValue = () =>
-        {
-            return this.conversationalAI && this.conversationalAI.isAISpeaking() ? 1 : 0
-        }
-        this.variations.aiSpeaking.getDefault = () =>
-        {
-            return 0
         }
         this.variations.volume.getDefault = () =>
         {
@@ -457,14 +255,6 @@ export default class Sphere
                 uFresnelMultiplier: { value: 3.587 },
                 uFresnelPower: { value: 1.793 },
 
-                // Enhanced material properties
-                uMetallic: { value: 0.8 },
-                uRoughness: { value: 0.2 },
-                uIridescence: { value: 0.6 },
-                uEnergyFlow: { value: 1.0 },
-                uScanlineSpeed: { value: 0.5 },
-                uHolographicStrength: { value: 0.3 },
-
                 uTime: { value: 0 }
             },
             defines:
@@ -472,7 +262,7 @@ export default class Sphere
                 USE_TANGENT: ''
             },
             vertexShader: vertexShader,
-            fragmentShader: enhancedFragmentShader
+            fragmentShader: fragmentShader
         })
 
         this.material.uniforms.uLightAPosition.value.setFromSpherical(this.lights.a.spherical)
@@ -532,9 +322,6 @@ export default class Sphere
 
     update()
     {
-        // Update theme properties
-        const themeProps = this.getCurrentThemeProps()
-        
         // Update variations
         for(let _variationName in this.variations)
         {
@@ -551,38 +338,8 @@ export default class Sphere
 
         // Update material
         this.material.uniforms.uDisplacementStrength.value = this.variations.volume.current
-        this.material.uniforms.uDistortionStrength.value = this.variations.highLevel.current * themeProps.distortion.strength
-        this.material.uniforms.uDistortionFrequency.value = themeProps.distortion.frequency
-        this.material.uniforms.uDisplacementFrequency.value = themeProps.displacement.frequency
-        this.material.uniforms.uFresnelOffset.value = themeProps.fresnel.offset
-        this.material.uniforms.uFresnelMultiplier.value = this.variations.mediumLevel.current * themeProps.fresnel.multiplier
-        this.material.uniforms.uFresnelPower.value = themeProps.fresnel.power
-        
-        // Update enhanced material properties
-        this.material.uniforms.uMetallic.value = themeProps.materialProps.metallic
-        this.material.uniforms.uRoughness.value = themeProps.materialProps.roughness
-        this.material.uniforms.uIridescence.value = themeProps.materialProps.iridescence
-        this.material.uniforms.uEnergyFlow.value = themeProps.materialProps.energyFlow
-        
-        // Update light colors and intensities
-        if (typeof themeProps.lightA.color.r !== 'undefined') {
-            this.material.uniforms.uLightAColor.value.copy(themeProps.lightA.color)
-        } else {
-            this.material.uniforms.uLightAColor.value.set(themeProps.lightA.color)
-        }
-        
-        if (typeof themeProps.lightB.color.r !== 'undefined') {
-            this.material.uniforms.uLightBColor.value.copy(themeProps.lightB.color)
-        } else {
-            this.material.uniforms.uLightBColor.value.set(themeProps.lightB.color)
-        }
-
-        // Dynamic color mixing based on AI speaking state
-        const aiSpeakingIntensity = this.variations.aiSpeaking.current
-        
-        // Interpolate light intensities based on AI state
-        this.material.uniforms.uLightAIntensity.value = themeProps.lightA.intensity * (0.5 + aiSpeakingIntensity * 0.5)
-        this.material.uniforms.uLightBIntensity.value = themeProps.lightB.intensity * (0.5 + (1 - aiSpeakingIntensity) * 0.5)
+        this.material.uniforms.uDistortionStrength.value = this.variations.highLevel.current
+        this.material.uniforms.uFresnelMultiplier.value = this.variations.mediumLevel.current
 
         // Offset
         const offsetTime = this.elapsedTime * 0.3
