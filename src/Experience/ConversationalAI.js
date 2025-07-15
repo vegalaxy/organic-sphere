@@ -27,7 +27,102 @@ export default class ConversationalAI
         // Auto-initialize
         this.createSplashScreen()
         this.createOffButton()
+        this.createThemeSelector()
         this.autoInit()
+    }
+    
+    createThemeSelector()
+    {
+        // Create theme selector UI
+        this.themeSelector = document.createElement('div')
+        this.themeSelector.className = 'ai-theme-selector'
+        this.themeSelector.innerHTML = `
+            <div class="ai-theme-button" data-theme="energetic" title="Energetic Assistant">⚡</div>
+            <div class="ai-theme-button" data-theme="calm" title="Calm Therapist">🌊</div>
+            <div class="ai-theme-button" data-theme="mysterious" title="Mysterious Oracle">🔮</div>
+            <div class="ai-theme-button" data-theme="professional" title="Professional Assistant">💼</div>
+            <div class="ai-theme-button" data-theme="warm" title="Warm Companion">🔥</div>
+        `
+        document.body.appendChild(this.themeSelector)
+        
+        // Add theme selector styles
+        const style = document.createElement('style')
+        style.textContent = `
+            .ai-theme-selector {
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                z-index: 1000;
+                opacity: 0.7;
+                transition: opacity 0.3s ease;
+            }
+            
+            .ai-theme-selector:hover {
+                opacity: 1;
+            }
+            
+            .ai-theme-button {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                background: rgba(0, 0, 0, 0.6);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                font-size: 18px;
+                transition: all 0.2s ease;
+                backdrop-filter: blur(10px);
+                user-select: none;
+            }
+            
+            .ai-theme-button:hover {
+                transform: scale(1.1);
+                background: rgba(0, 0, 0, 0.8);
+                border-color: rgba(255, 255, 255, 0.3);
+            }
+            
+            .ai-theme-button.active {
+                background: rgba(255, 255, 255, 0.2);
+                border-color: rgba(255, 255, 255, 0.5);
+                transform: scale(1.05);
+            }
+            
+            .ai-theme-selector.hidden {
+                opacity: 0;
+                pointer-events: none;
+            }
+        `
+        document.head.appendChild(style)
+        
+        // Add click handlers
+        this.themeSelector.addEventListener('click', (e) => {
+            if (e.target.classList.contains('ai-theme-button')) {
+                const theme = e.target.dataset.theme
+                this.changeTheme(theme)
+                
+                // Update active state
+                this.themeSelector.querySelectorAll('.ai-theme-button').forEach(btn => {
+                    btn.classList.remove('active')
+                })
+                e.target.classList.add('active')
+            }
+        })
+        
+        // Set initial active theme
+        this.themeSelector.querySelector('[data-theme="energetic"]').classList.add('active')
+    }
+    
+    changeTheme(themeName)
+    {
+        // Get the sphere instance and change its theme
+        if (this.experience && this.experience.world && this.experience.world.sphere) {
+            this.experience.world.sphere.transitionToTheme(themeName)
+        }
     }
     
     createSplashScreen()

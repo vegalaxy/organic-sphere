@@ -23,6 +23,8 @@ uniform float uFresnelPower;
 uniform float uTime;
 
 varying vec3 vColor;
+varying vec3 vNormal;
+varying vec3 vPosition;
 
 #pragma glslify: perlin4d = require('../partials/perlin4d.glsl')
 #pragma glslify: perlin3d = require('../partials/perlin3d.glsl')
@@ -45,6 +47,7 @@ void main()
     // Position
     vec3 displacedPosition = getDisplacedPosition(position);
     vec4 viewPosition = viewMatrix * vec4(displacedPosition, 1.0);
+    vPosition = displacedPosition;
     gl_Position = projectionMatrix * viewPosition;
 
     // Bi tangents
@@ -61,6 +64,9 @@ void main()
 
     vec3 computedNormal = cross(displacedPositionA - displacedPosition.xyz, displacedPositionB - displacedPosition.xyz);
     computedNormal = normalize(computedNormal);
+
+    // Pass normal to fragment shader
+    vNormal = computedNormal;
 
     // Fresnel
     vec3 viewDirection = normalize(displacedPosition.xyz - cameraPosition);
