@@ -27,7 +27,7 @@ export default class VideoBackground
     {
         // Create video element
         this.video = document.createElement('video')
-        this.video.src = 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'
+        this.video.src = 'https://preservr.org/videos/video-baleine.mp4'
         this.video.crossOrigin = 'anonymous'
         this.video.loop = true
         this.video.muted = true
